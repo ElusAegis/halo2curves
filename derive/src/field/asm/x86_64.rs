@@ -1,6 +1,6 @@
 use proc_macro2::TokenStream;
 
-pub(crate) fn impl_add_asm() -> TokenStream {
+pub(super) fn impl_add_asm() -> TokenStream {
     quote::quote! {
         asm!(
             // load a array to former registers
@@ -49,7 +49,7 @@ pub(crate) fn impl_add_asm() -> TokenStream {
     }
 }
 
-pub(crate) fn impl_sub_asm() -> TokenStream {
+pub(super) fn impl_sub_asm() -> TokenStream {
     quote::quote! {
         asm!(
             // init modulus area
@@ -98,6 +98,6 @@ pub(crate) fn impl_sub_asm() -> TokenStream {
             out("r14") r2,
             out("r15") r3,
             options(pure, readonly, nostack)
-        )
+        );
     }
 }

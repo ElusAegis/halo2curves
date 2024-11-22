@@ -1,7 +1,8 @@
 use proc_macro2::TokenStream;
 // TODO - optimise with lateout
+// TODO - try to optimise register allocation and see if it improves performance
 
-pub(crate) fn impl_add_asm() -> TokenStream {
+pub(super) fn impl_add_asm() -> TokenStream {
     quote::quote! {
         std::arch::asm!(
             // Load 'a' array into registers
@@ -63,14 +64,9 @@ pub(crate) fn impl_add_asm() -> TokenStream {
     }
 }
 
-pub(crate) fn impl_sub_asm() -> TokenStream {
+pub(super) fn impl_sub_asm() -> TokenStream {
     quote::quote! {
         std::arch::asm!(
-            // Load 'm' array into registers (modulus)
-            "ldr {m0}, [{m_ptr}, #0]",
-            "ldr {m1}, [{m_ptr}, #8]",
-            "ldr {m2}, [{m_ptr}, #16]",
-            "ldr {m3}, [{m_ptr}, #24]",
 
             // Load 'a' array into temporary registers
             "ldr {a0}, [{a_ptr}, #0]",
@@ -83,19 +79,23 @@ pub(crate) fn impl_sub_asm() -> TokenStream {
             "ldr {b1}, [{b_ptr}, #8]",
             "ldr {b2}, [{b_ptr}, #16]",
             "ldr {b3}, [{b_ptr}, #24]",
+
             "subs {a0}, {a0}, {b0}",  // a0 = a0 - b0, sets flags
             "sbcs {a1}, {a1}, {b1}",  // a1 = a1 - b1 - borrow
             "sbcs {a2}, {a2}, {b2}",
             "sbcs {a3}, {a3}, {b3}",
 
-            // Mask: If borrow, result is less than modulus, set flags
-            "sbcs xzr, xzr, xzr",      // Overflow flag set if borrow
+            // Load 'm' array into registers (modulus)
+            "ldr {m0}, [{m_ptr}, #0]",
+            "ldr {m1}, [{m_ptr}, #8]",
+            "ldr {m2}, [{m_ptr}, #16]",
+            "ldr {m3}, [{m_ptr}, #24]",
 
-            // Zero out modulus if a-b < m or leave as-is otherwise
-            "ands {m0}, {m0}, xzr",    // Mask out values based on overflow
-            "ands {m1}, {m1}, xzr",
-            "ands {m2}, {m2}, xzr",
-            "ands {m3}, {m3}, xzr",
+            // Mask: Use conditional selection to zero out modulus if borrow occurred
+            "csel {m0}, xzr, {m0}, cs",  // cs = carry set (no borrow)
+            "csel {m1}, xzr, {m1}, cs",
+            "csel {m2}, xzr, {m2}, cs",
+            "csel {m3}, xzr, {m3}, cs",
 
             // Add modulus to result if borrow occurred
             "adds {r0}, {a0}, {m0}",
@@ -108,23 +108,23 @@ pub(crate) fn impl_sub_asm() -> TokenStream {
             a_ptr = in(reg) a_ptr,
             b_ptr = in(reg) b_ptr,
             // Output operands
-            r0 = out(reg) r0,
-            r1 = out(reg) r1,
-            r2 = out(reg) r2,
-            r3 = out(reg) r3,
+            r0 = lateout(reg) r0,
+            r1 = lateout(reg) r1,
+            r2 = lateout(reg) r2,
+            r3 = lateout(reg) r3,
             // Temporary (clobbered) registers
             a0 = out(reg) _,
             a1 = out(reg) _,
             a2 = out(reg) _,
             a3 = out(reg) _,
-            m0 = out(reg) _,
-            m1 = out(reg) _,
-            m2 = out(reg) _,
-            m3 = out(reg) _,
             b0 = out(reg) _,
             b1 = out(reg) _,
             b2 = out(reg) _,
             b3 = out(reg) _,
+            m0 = out(reg) _,
+            m1 = out(reg) _,
+            m2 = out(reg) _,
+            m3 = out(reg) _,
             options(pure, readonly, nostack)
         );
     }
