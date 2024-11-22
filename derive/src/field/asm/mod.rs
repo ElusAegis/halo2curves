@@ -12,6 +12,8 @@ pub(crate) fn impl_arith(field: &syn::Ident, num_limbs: usize, inv: u64) -> Toke
     let impl_add_asm_aarch64 = aarch64::impl_add_asm();
     let impl_sub_asm_x86_64 = x86_64::impl_sub_asm();
     let impl_sub_asm_aarch64 = aarch64::impl_sub_asm();
+    let impl_neg_asm_x86_64 = x86_64::impl_neg_asm();
+    let impl_neg_asm_aarch64 = aarch64::impl_neg_asm();
 
     #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
     {
@@ -99,9 +101,34 @@ pub(crate) fn impl_arith(field: &syn::Ident, num_limbs: usize, inv: u64) -> Toke
                 res_asm
             }
 
-            #[inline(always)]
-            pub fn neg(&self) -> Self {
-                #impl_neg
+            /// Negates `self`.
+            #[inline]
+            pub fn neg(&self) -> #field {
+                let mut r0: u64;
+                let mut r1: u64;
+                let mut r2: u64;
+                let mut r3: u64;
+
+                let a_ptr: *const u64 = self.0.as_ptr();
+                let m_ptr: *const u64 = #field::MODULUS_LIMBS.as_ptr();
+
+                unsafe {
+                    #[cfg(target_arch = "x86_64")]
+                    #impl_neg_asm_x86_64
+
+                    #[cfg(target_arch = "aarch64")]
+                    #impl_neg_asm_aarch64
+                }
+
+                let res_asm = #field([r0, r1, r2, r3]);
+
+                // TODO - remove this check in production
+                let res_naive = {#impl_neg};
+                if res_asm != res_naive {
+                    panic!("Bug in ASM: {:?} (asm) != {:?} (expected)", res_asm, res_naive);
+                }
+
+                res_asm
             }
 
             #[inline(always)]

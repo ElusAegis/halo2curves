@@ -129,3 +129,70 @@ pub(super) fn impl_sub_asm() -> TokenStream {
         );
     }
 }
+
+pub(crate) fn impl_neg_asm() -> TokenStream {
+    quote::quote! {
+        std::arch::asm!(
+            // Load 'm' array into registers
+            "ldr {m0}, [{m_ptr}, #0]",
+            "ldr {m1}, [{m_ptr}, #8]",
+            "ldr {m2}, [{m_ptr}, #16]",
+            "ldr {m3}, [{m_ptr}, #24]",
+
+            // Subtract 'a' array from 'm' array with borrow propagation
+            "ldr {a0}, [{a_ptr}, #0]",
+            "ldr {a1}, [{a_ptr}, #8]",
+            "ldr {a2}, [{a_ptr}, #16]",
+            "ldr {a3}, [{a_ptr}, #24]",
+            "subs {r0}, {m0}, {a0}",  // r0 = m0 - a0, sets flags
+            "sbcs {r1}, {m1}, {a1}",  // r1 = m1 - a1 - borrow
+            "sbcs {r2}, {m2}, {a2}",
+            "sbcs {r3}, {m3}, {a3}",
+
+            // Load 'a' array into temporary registers
+            "ldr {t0}, [{a_ptr}, #0]",
+            "ldr {t1}, [{a_ptr}, #8]",
+            "ldr {t2}, [{a_ptr}, #16]",
+            "ldr {t3}, [{a_ptr}, #24]",
+
+            // Perform OR operations across the 'a' array
+            "orr {t0}, {t0}, {t1}",
+            "orr {t2}, {t2}, {t3}",
+            "orr {t0}, {t0}, {t2}",
+
+            // Check if result is zero and conditionally mask
+            "mov {mask}, -1",            // mask = 0xffffffffffffffff
+            "cmp {t0}, #0",              // Compare OR result with zero
+            "csel {mask}, xzr, {mask}, eq",  // mask = 0 if zero, -1 otherwise
+
+            // Apply mask to the result
+            "and {r0}, {r0}, {mask}",
+            "and {r1}, {r1}, {mask}",
+            "and {r2}, {r2}, {mask}",
+            "and {r3}, {r3}, {mask}",
+
+            // Outputs
+            a_ptr = in(reg) a_ptr,
+            m_ptr = in(reg) m_ptr,
+            r0 = out(reg) r0,
+            r1 = out(reg) r1,
+            r2 = out(reg) r2,
+            r3 = out(reg) r3,
+            // Temporary registers
+            a0 = out(reg) _,
+            a1 = out(reg) _,
+            a2 = out(reg) _,
+            a3 = out(reg) _,
+            t0 = out(reg) _,
+            t1 = out(reg) _,
+            t2 = out(reg) _,
+            t3 = out(reg) _,
+            m0 = out(reg) _,
+            m1 = out(reg) _,
+            m2 = out(reg) _,
+            m3 = out(reg) _,
+            mask = out(reg) _,
+            options(pure, readonly, nostack)
+        );
+    }
+}

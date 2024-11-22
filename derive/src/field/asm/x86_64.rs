@@ -101,3 +101,50 @@ pub(super) fn impl_sub_asm() -> TokenStream {
         );
     }
 }
+
+pub(crate) fn impl_neg_asm() -> TokenStream {
+    quote::quote! {
+        asm!(
+            // load a array to former registers
+            "mov r8, qword ptr [{m_ptr} + 0]",
+            "mov r9, qword ptr [{m_ptr} + 8]",
+            "mov r10, qword ptr [{m_ptr} + 16]",
+            "mov r11, qword ptr [{m_ptr} + 24]",
+
+            "sub r8, qword ptr [{a_ptr} + 0]",
+            "sbb r9, qword ptr [{a_ptr} + 8]",
+            "sbb r10, qword ptr [{a_ptr} + 16]",
+            "sbb r11, qword ptr [{a_ptr} + 24]",
+
+            "mov r12, qword ptr [{a_ptr} + 0]",
+            "mov r13, qword ptr [{a_ptr} + 8]",
+            "mov r14, qword ptr [{a_ptr} + 16]",
+            "mov r15, qword ptr [{a_ptr} + 24]",
+
+            "or r12, r13",
+            "or r14, r15",
+            "or r12, r14",
+
+            "mov r13, 0xffffffffffffffff",
+            "cmp r12, 0x0000000000000000",
+            "cmove r13, r12",
+
+            "and r8, r13",
+            "and r9, r13",
+            "and r10, r13",
+            "and r11, r13",
+
+            m_ptr = in(reg) m_ptr,
+            a_ptr = in(reg) a_ptr,
+            out("r8") r0,
+            out("r9") r1,
+            out("r10") r2,
+            out("r11") r3,
+            out("r12") _,
+            out("r13") _,
+            out("r14") _,
+            out("r15") _,
+            options(pure, readonly, nostack)
+        );
+    }
+}
