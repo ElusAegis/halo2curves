@@ -95,7 +95,7 @@ pub(crate) fn impl_arith_always_const(
     }
 }
 
-fn impl_mul(field: &syn::Ident, num_limbs: usize, constant: bool) -> TokenStream {
+pub(crate) fn impl_mul(field: &syn::Ident, num_limbs: usize, constant: bool) -> TokenStream {
     let mut gen = quote! { use crate::arithmetic::{adc, sbb, mac}; };
     for i in 0..num_limbs {
         for j in 0..num_limbs {
@@ -122,7 +122,7 @@ fn impl_mul(field: &syn::Ident, num_limbs: usize, constant: bool) -> TokenStream
     }
 }
 
-fn impl_square(field: &syn::Ident, num_limbs: usize) -> TokenStream {
+pub(crate) fn impl_square(field: &syn::Ident, num_limbs: usize) -> TokenStream {
     let mut gen = quote! { use crate::arithmetic::{adc, sbb, mac}; };
     for i in 0..num_limbs - 1 {
         let start_index = i * 2 + 1;
@@ -168,7 +168,7 @@ fn impl_square(field: &syn::Ident, num_limbs: usize) -> TokenStream {
     }
 }
 
-fn impl_add(field: &syn::Ident, num_limbs: usize) -> TokenStream {
+pub(crate) fn impl_add(field: &syn::Ident, num_limbs: usize) -> TokenStream {
     let mut gen = quote! { use crate::arithmetic::{adc, sbb}; };
 
     (0..num_limbs).for_each(|i| {
@@ -203,7 +203,7 @@ fn impl_add(field: &syn::Ident, num_limbs: usize) -> TokenStream {
     }
 }
 
-fn impl_sub(field: &syn::Ident, num_limbs: usize) -> TokenStream {
+pub(crate) fn impl_sub(field: &syn::Ident, num_limbs: usize) -> TokenStream {
     let mut gen = quote! { use crate::arithmetic::{adc, sbb}; };
 
     (0..num_limbs).for_each(|i| {
@@ -229,7 +229,7 @@ fn impl_sub(field: &syn::Ident, num_limbs: usize) -> TokenStream {
     }
 }
 
-fn impl_neg(field: &syn::Ident, num_limbs: usize) -> TokenStream {
+pub(crate) fn impl_neg(field: &syn::Ident, num_limbs: usize) -> TokenStream {
     let mut gen = quote! { use crate::arithmetic::{adc, sbb}; };
 
     (0..num_limbs).for_each(|i| {
@@ -257,7 +257,7 @@ fn impl_neg(field: &syn::Ident, num_limbs: usize) -> TokenStream {
     }
 }
 
-fn impl_mont(field: &syn::Ident, num_limbs: usize, inv: u64) -> TokenStream {
+pub(crate) fn impl_mont(field: &syn::Ident, num_limbs: usize, inv: u64) -> TokenStream {
     let mut gen = quote! { use crate::arithmetic::{adc, sbb, mac}; };
 
     for i in 0..num_limbs {
@@ -313,7 +313,7 @@ fn impl_mont(field: &syn::Ident, num_limbs: usize, inv: u64) -> TokenStream {
     }
 }
 
-fn impl_from_mont(field: &syn::Ident, num_limbs: usize, inv: u64) -> TokenStream {
+pub(crate) fn impl_from_mont(field: &syn::Ident, num_limbs: usize, inv: u64) -> TokenStream {
     let mut gen = quote! { use crate::arithmetic::{adc, sbb, mac}; };
 
     for i in 0..num_limbs {
