@@ -148,3 +148,51 @@ pub(crate) fn impl_neg_asm() -> TokenStream {
         );
     }
 }
+
+pub(crate) fn impl_double_asm() -> TokenStream {
+    quote::quote! {
+        asm!(
+            // load a array to former registers
+            "mov r8, qword ptr [{a_ptr} + 0]",
+            "mov r9, qword ptr [{a_ptr} + 8]",
+            "mov r10, qword ptr [{a_ptr} + 16]",
+            "mov r11, qword ptr [{a_ptr} + 24]",
+
+            // add a array and b array with carry
+            "add r8, r8",
+            "adc r9, r9",
+            "adc r10, r10",
+            "adc r11, r11",
+
+            // copy result array to latter registers
+            "mov r12, r8",
+            "mov r13, r9",
+            "mov r14, r10",
+            "mov r15, r11",
+
+            // mod reduction
+            "sub r12, qword ptr [{m_ptr} + 0]",
+            "sbb r13, qword ptr [{m_ptr} + 8]",
+            "sbb r14, qword ptr [{m_ptr} + 16]",
+            "sbb r15, qword ptr [{m_ptr} + 24]",
+
+            // if carry copy former registers to out areas
+            "cmovc r12, r8",
+            "cmovc r13, r9",
+            "cmovc r14, r10",
+            "cmovc r15, r11",
+
+            m_ptr = in(reg) m_ptr,
+            a_ptr = in(reg) a_ptr,
+            out("r8") _,
+            out("r9") _,
+            out("r10") _,
+            out("r11") _,
+            out("r12") r0,
+            out("r13") r1,
+            out("r14") r2,
+            out("r15") r3,
+            options(pure, readonly, nostack)
+        );
+    }
+}
