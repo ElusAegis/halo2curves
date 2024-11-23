@@ -820,7 +820,6 @@ pub(crate) fn impl_mul_asm() -> TokenStream {
             "sbcs {r1}, {t1}, {m1}",       // r1 = t1 - m1 - borrow
             "sbcs {r2}, {t2}, {m2}",
             "sbcs {r3}, {t3}, {m3}",
-            "sbc {borrow}, xzr, xzr",      // borrow = final borrow
 
             // Conditional select: if borrow is 0, result is r0..r3
             // Otherwise, result is t0..t3
@@ -859,7 +858,6 @@ pub(crate) fn impl_mul_asm() -> TokenStream {
             mul_hi = out(reg) _,
             mul_lo = out(reg) _,
             inv_reg = out(reg) _,
-            borrow = out(reg) _,
             options(pure, readonly, nostack)
         );
     }
