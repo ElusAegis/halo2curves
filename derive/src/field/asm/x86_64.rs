@@ -320,3 +320,234 @@ pub(crate) fn impl_from_mont_asm() -> TokenStream {
         );
     }
 }
+
+pub(crate) fn impl_mul_asm() -> TokenStream {
+    quote::quote! {
+        asm!(
+            // Coarsely Integrated Operand Scanning:
+            // - Analyzing and Comparing Montgomery Multiplication Algorithms
+            //   Cetin Kaya Koc and Tolga Acar and Burton S. Kaliski Jr.
+            //   http://pdfs.semanticscholar.org/5e39/41ff482ec3ee41dc53c3298f0be085c69483.pdf
+            //
+            // No-carry optimization
+            // - https://hackmd.io/@gnark/modular_multiplication
+            //
+            // Code generator
+            // - https://github.com/mratsim/constantine/blob/151f284/constantine/math/arithmetic/assembly/limbs_asm_mul_mont_x86_adx_bmi2.nim#L231-L269
+            //
+            // Assembly generated
+            // - https://github.com/ethereum/evmone/blob/d006d81/lib/evmmax/mulMont256_spare_bits_asm_adx.S
+
+            // Algorithm
+            // -----------------------------------------
+            // for i=0 to N-1
+            //   for j=0 to N-1
+            // 		(A,t[j])  := t[j] + a[j]*b[i] + A
+            //   m := t[0]*m0ninv mod W
+            // 	C,_ := t[0] + m*M[0]
+            // 	for j=1 to N-1
+            // 		(C,t[j-1]) := t[j] + m*M[j] + C
+            //   t[N-1] = C + A
+
+            // Outer loop i = 0
+            //   Multiplication
+            "mov  rdx, qword ptr [{b_ptr} + 0]",
+            "mulx r13, r11, qword ptr [{a_ptr} + 0]",
+            "mulx rax, r15, qword ptr [{a_ptr} + 8]",
+            "add  r13, r15",
+            "mulx r14, r15, qword ptr [{a_ptr} + 16]",
+            "adc  rax, r15",
+            //   Multiplication. last limb
+            "mulx r12, r15, qword ptr [{a_ptr} + 24]",
+            "adc  r14, r15",
+            "adc  r12, 0", // accumulate last carries in hi word
+
+            //   Reduction
+            //   m = t[0] * m0ninv mod 2^w
+            "mov  rdx, r11",
+            "imul rdx, {inv}",
+            "xor  r15, r15",
+            //   C,_ := t[0] + m*M[0]
+            "mulx r15, r10, qword ptr [{m_ptr} + 0]",
+            "adcx r10, r11",
+            "mov  r11, r15",
+            "mov  r10, 0",
+            //   for j=1 to N-1
+            //     (C, t[j-1]) := t[j] + m*M[j] + C
+            "adcx r11, r13",
+            "mulx r13, r15, qword ptr [{m_ptr} + 8]",
+            "adox r11, r15",
+            "adcx r13, rax",
+            "mulx rax, r15, qword ptr [{m_ptr} + 16]",
+            "adox r13, r15",
+            "adcx rax, r14",
+            "mulx r14, r15, qword ptr [{m_ptr} + 24]",
+            "adox rax, r15",
+            //   Reduction carry
+            "adcx r10, r12",
+            "adox r14, r10",
+
+            // Outer loop i = 1, j in [0, 4)
+            "mov  rdx, qword ptr [{b_ptr} + 8]",
+            "xor  r12, r12",
+            "mulx r12, r15, qword ptr [{a_ptr} + 0]",
+            "adox r11, r15",
+            "adcx r13, r12",
+            "mulx r12, r15, qword ptr [{a_ptr} + 8]",
+            "adox r13, r15",
+            "adcx rax, r12",
+            "mulx r12, r15, qword ptr [{a_ptr} + 16]",
+            "adox rax, r15",
+            "adcx r14, r12",
+            //   Multiplication, last limb
+            "mulx r12, r15, qword ptr [{a_ptr} + 24]",
+            "adox r14, r15",
+            "mov  rdx, 0", // accumulate last carries in hi word
+            "adcx r12, rdx",
+            "adox r12, rdx",
+
+            //   Reduction
+            //   m = t[0] * m0ninv mod 2^w
+            "mov  rdx, r11",
+            "imul rdx, {inv}",
+            "xor  r15, r15",
+            //   C,_ := t[0] + m*M[0]
+            "mulx r15, r10, qword ptr [{m_ptr} + 0]",
+            "adcx r10, r11",
+            "mov  r11, r15",
+            "mov  r10, 0",
+            //   for j=1 to N-1
+            //     (C, t[j-1]) := t[j] + m*M[j] + C
+            "adcx r11, r13",
+            "mulx r13, r15, qword ptr [{m_ptr} + 8]",
+            "adox r11, r15",
+            "adcx r13, rax",
+            "mulx rax, r15, qword ptr [{m_ptr} + 16]",
+            "adox r13, r15",
+            "adcx rax, r14",
+            "mulx r14, r15, qword ptr [{m_ptr} + 24]",
+            "adox rax, r15",
+            //   Reduction carry
+            "adcx r10, r12",
+            "adox r14, r10",
+
+            // Outer loop i = 2, j in [0, 4)
+            "mov  rdx, qword ptr [{b_ptr} + 16]",
+            "xor  r12, r12",
+            "mulx r12, r15, qword ptr [{a_ptr} + 0]",
+            "adox r11, r15",
+            "adcx r13, r12",
+            "mulx r12, r15, qword ptr [{a_ptr} + 8]",
+            "adox r13, r15",
+            "adcx rax, r12",
+            "mulx r12, r15, qword ptr [{a_ptr} + 16]",
+            "adox rax, r15",
+            "adcx r14, r12",
+            //   Multiplication, last limb
+            "mulx r12, r15, qword ptr [{a_ptr} + 24]",
+            "adox r14, r15",
+            "mov  rdx, 0", // accumulate last carries in hi word
+            "adcx r12, rdx",
+            "adox r12, rdx",
+
+            //   Reduction
+            //   m = t[0] * m0ninv mod 2^w
+            "mov  rdx, r11",
+            "imul rdx, {inv}",
+            "xor  r15, r15",
+            //   C,_ := t[0] + m*M[0]
+            "mulx r15, r10, qword ptr [{m_ptr} + 0]",
+            "adcx r10, r11",
+            "mov  r11, r15",
+            "mov  r10, 0",
+            //   for j=1 to N-1
+            //     (C, t[j-1]) := t[j] + m*M[j] + C
+            "adcx r11, r13",
+            "mulx r13, r15, qword ptr [{m_ptr} + 8]",
+            "adox r11, r15",
+            "adcx r13, rax",
+            "mulx rax, r15, qword ptr [{m_ptr} + 16]",
+            "adox r13, r15",
+            "adcx rax, r14",
+            "mulx r14, r15, qword ptr [{m_ptr} + 24]",
+            "adox rax, r15",
+            //   Reduction carry
+            "adcx r10, r12",
+            "adox r14, r10",
+
+            // Outer loop i = 3, j in [0, 4)
+            "mov  rdx, qword ptr [{b_ptr} + 24]",
+            "xor  r12, r12",
+            "mulx r12, r15, qword ptr [{a_ptr} + 0]",
+            "adox r11, r15",
+            "adcx r13, r12",
+            "mulx r12, r15, qword ptr [{a_ptr} + 8]",
+            "adox r13, r15",
+            "adcx rax, r12",
+            "mulx r12, r15, qword ptr [{a_ptr} + 16]",
+            "adox rax, r15",
+            "adcx r14, r12",
+            //   Multiplication, last limb
+            "mulx r12, r15, qword ptr [{a_ptr} + 24]",
+            "adox r14, r15",
+            "mov  rdx, 0", // accumulate last carries in hi word
+            "adcx r12, rdx",
+            "adox r12, rdx",
+
+            //   Reduction
+            //   m = t[0] * m0ninv mod 2^w
+            "mov  rdx, r11",
+            "imul rdx, {inv}",
+            "xor  r15, r15",
+            //   C,_ := t[0] + m*M[0]
+            "mulx r15, r10, qword ptr [{m_ptr} + 0]",
+            "adcx r10, r11",
+            "mov  r11, r15",
+            "mov  r10, 0",
+            //   for j=1 to N-1
+            //     (C, t[j-1]) := t[j] + m*M[j] + C
+            "adcx r11, r13",
+            "mulx r13, r15, qword ptr [{m_ptr} + 8]",
+            "adox r11, r15",
+            "adcx r13, rax",
+            "mulx rax, r15, qword ptr [{m_ptr} + 16]",
+            "adox r13, r15",
+            "adcx rax, r14",
+            "mulx r14, r15, qword ptr [{m_ptr} + 24]",
+            "adox rax, r15",
+            //   Reduction carry
+            "adcx r10, r12",
+            "adox r14, r10",
+
+            //   Final subtraction
+            "mov  r12, r11",
+            "sub  r12, qword ptr [{m_ptr} + 0]",
+            "mov  r10, r13",
+            "sbb  r10, qword ptr [{m_ptr} + 8]",
+            "mov  rdx, rax",
+            "sbb  rdx, qword ptr [{m_ptr} + 16]",
+            "mov  r15, r14",
+            "sbb  r15, qword ptr [{m_ptr} + 24]",
+
+            "cmovnc r11, r12",
+            "cmovnc r13, r10",
+            "cmovnc rax, rdx",
+            "cmovnc r14, r15",
+
+            // Outputs
+            m_ptr = in(reg) m_ptr,
+            a_ptr = in(reg) a_ptr,
+            b_ptr = in(reg) b_ptr,
+            inv = in(reg) inv,
+            out("rax") r2,
+            out("rdx") _,
+            out("r10") _,
+            out("r11") r0,
+            out("r12") _,
+            out("r13") r1,
+            out("r14") r3,
+            out("r15") _,
+            options(pure, readonly, nostack)
+        );
+    }
+}
