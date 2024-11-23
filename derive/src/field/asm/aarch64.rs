@@ -251,3 +251,156 @@ pub(crate) fn impl_double_asm() -> TokenStream {
         );
     }
 }
+
+pub(crate) fn impl_from_mont_asm() -> TokenStream {
+    quote::quote! {
+        std::arch::asm!(
+            // Load 'a' limbs into registers r0-r3
+            "ldr {r0}, [{a_ptr}, #0]",     // r0 = a[0]
+            "ldr {r1}, [{a_ptr}, #8]",     // r1 = a[1]
+            "ldr {r2}, [{a_ptr}, #16]",    // r2 = a[2]
+            "ldr {r3}, [{a_ptr}, #24]",    // r3 = a[3]
+
+            // Load 'm' limbs into registers m0-m3
+            "ldr {m0}, [{m_ptr}, #0]",     // m0 = m[0]
+            "ldr {m1}, [{m_ptr}, #8]",     // m1 = m[1]
+            "ldr {m2}, [{m_ptr}, #16]",    // m2 = m[2]
+            "ldr {m3}, [{m_ptr}, #24]",    // m3 = m[3]
+
+            // Load 'inv' (Montgomery constant)
+            "mov {inv_reg}, {inv}",        // inv_reg = inv
+
+            // ========================
+            // Begin Montgomery Reduction Loop
+            // ========================
+
+            // Loop for i = 0 to 3
+            // i = 0
+            // Compute m = (r0 * inv) mod R (we only need the low part)
+            "mul {m}, {r0}, {inv_reg}",    // m = r0 * inv (low 64 bits)
+
+            // Multiply and accumulate with modulus limbs
+            // As on Aarch64 we have no 128-bit multiply,
+            // as well as no way to do addition in two carry chains,
+            // we split the operation into low and high parts
+
+            // Low part first:
+            // j = 0
+            "mul {l}, {m}, {m0}",         // t0 = m * m[0] (low)
+            "adds {r0}, {r0}, {l}",       // r0 = r0 + t0, set flags
+            // j = 1
+            "mul {l}, {m}, {m1}",         // t1 = m * m[1] (low)
+            "adcs {r1}, {r1}, {l}",       // r1 = r1 + t1, set flags
+            // j = 2
+            "mul {l}, {m}, {m2}",         // t2 = m * m[2] (low)
+            "adcs {r2}, {r2}, {l}",       // r2 = r2 + t2, set flags
+            // j = 3
+            "mul {l}, {m}, {m3}",         // t3 = m * m[3] (low)
+            "adc {r3}, {r3}, {l}",       // r3 = r3 + t3, set flags
+
+            // High part next:
+            // j = 0
+            "umulh {h}, {m}, {m0}",         // t0 = m * m[0] (high)
+            "adds {r1}, {r1}, {h}",       // r1 = r1 + t0 + carry
+            // j = 1
+            "umulh {h}, {m}, {m1}",         // t1 = m * m[1] (high)
+            "adcs {r2}, {r2}, {h}",       // r2 = r2 + t1 + carry
+            // j = 2
+            "umulh {h}, {m}, {m2}",         // t2 = m * m[2] (high)
+            "adcs {r3}, {r3}, {h}",       // r3 = r3 + t2 + carry
+            // j = 3
+            "umulh {h}, {m}, {m3}",         // t3 = m * m[3] (high)
+            "adc {r0}, {r0}, {h}",       // carry = carry + t3 + carry
+
+            // Repeat for i = 1, 2, 3 with adjusted indexing
+            // i = 1
+            "mul {m}, {r1}, {inv_reg}",
+            // Low part
+            "mul {l}, {m}, {m0}",
+            "adds {r1}, {r1}, {l}",
+            "mul {l}, {m}, {m1}",
+            "adcs {r2}, {r2}, {l}",
+            "mul {l}, {m}, {m2}",
+            "adcs {r3}, {r3}, {l}",
+            "mul {l}, {m}, {m3}",
+            "adc {r0}, {r0}, {l}",
+            // High part
+            "umulh {h}, {m}, {m0}",
+            "adds {r2}, {r2}, {h}",
+            "umulh {h}, {m}, {m1}",
+            "adcs {r3}, {r3}, {h}",
+            "umulh {h}, {m}, {m2}",
+            "adcs {r0}, {r0}, {h}",
+            "umulh {h}, {m}, {m3}",
+            "adcs {r1}, {r1}, {h}",
+
+            // i = 2
+            "mul {m}, {r2}, {inv_reg}",
+            // Low part
+            "mul {l}, {m}, {m0}",
+            "adds {r2}, {r2}, {l}",
+            "mul {l}, {m}, {m1}",
+            "adcs {r3}, {r3}, {l}",
+            "mul {l}, {m}, {m2}",
+            "adcs {r0}, {r0}, {l}",
+            "mul {l}, {m}, {m3}",
+            "adc {r1}, {r1}, {l}",
+            // High part
+            "umulh {h}, {m}, {m0}",
+            "adds {r3}, {r3}, {h}",
+            "umulh {h}, {m}, {m1}",
+            "adcs {r0}, {r0}, {h}",
+            "umulh {h}, {m}, {m2}",
+            "adcs {r1}, {r1}, {h}",
+            "umulh {h}, {m}, {m3}",
+            "adc {r2}, {r2}, {h}",
+
+            // i = 3
+            "mul {m}, {r3}, {inv_reg}",    // m = r3 * inv
+            // Low part
+            "mul {l}, {m}, {m0}",
+            "adds {r3}, {r3}, {l}",
+            "mul {l}, {m}, {m1}",
+            "adcs {r0}, {r0}, {l}",
+            "mul {l}, {m}, {m2}",
+            "adcs {r1}, {r1}, {l}",
+            "mul {l}, {m}, {m3}",
+            "adc {r2}, {r2}, {l}",
+            // High part
+            "umulh {h}, {m}, {m0}",
+            "adds {r0}, {r0}, {h}",
+            "umulh {h}, {m}, {m1}",
+            "adcs {r1}, {r1}, {h}",
+            "umulh {h}, {m}, {m2}",
+            "adcs {r2}, {r2}, {h}",
+            "umulh {h}, {m}, {m3}",
+            "adc {r3}, {r3}, {h}",
+
+            // ========================
+            // End of Montgomery Reduction Loop
+            // ========================
+
+            // The result is in r0 (we can output r0 as the final result)
+
+            // Outputs
+            a_ptr = in(reg) a_ptr,
+            m_ptr = in(reg) m_ptr,
+            inv = in(reg) inv,
+            // Output operands
+            r0 = out(reg) r0,
+            r1 = out(reg) r1,
+            r2 = out(reg) r2,
+            r3 = out(reg) r3,
+            // Temporary (clobbered) registers
+            m = out(reg) _,
+            l = out(reg) _,
+            h = out(reg) _,
+            m0 = out(reg) _,
+            m1 = out(reg) _,
+            m2 = out(reg) _,
+            m3 = out(reg) _,
+            inv_reg = out(reg) _,
+            options(pure, readonly, nostack)
+        );
+    }
+}

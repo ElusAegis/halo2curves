@@ -196,3 +196,127 @@ pub(crate) fn impl_double_asm() -> TokenStream {
         );
     }
 }
+
+pub(crate) fn impl_from_mont_asm() -> TokenStream {
+    quote::quote! {
+        asm!(
+            "mov r8, qword ptr [{a_ptr} + 0]",
+            "mov r9, qword ptr [{a_ptr} + 8]",
+            "mov r10, qword ptr [{a_ptr} + 16]",
+            "mov r11, qword ptr [{a_ptr} + 24]",
+            "mov r15, {inv}",
+            "xor r12, r12",
+
+            // i0
+            "mov rdx, r8",
+            "mulx rcx, rdx, r15",
+
+            // j0
+            "mulx rcx, rax, qword ptr [{m_ptr} + 0]",
+            "adox r8, rax",
+            "adcx r9, rcx",
+            // j1
+            "mulx rcx, rax, qword ptr [{m_ptr} + 8]",
+            "adox r9, rax",
+            "adcx r10, rcx",
+            // j2
+            "mulx rcx, rax, qword ptr [{m_ptr} + 16]",
+            "adox r10, rax",
+            "adcx r11, rcx",
+            // j3
+            "mulx rcx, rax, qword ptr [{m_ptr} + 24]",
+            "adox r11, rax",
+            "adcx r8, rcx",
+            "adox r8, r12",
+
+            // i1
+            "mov rdx, r9",
+            "mulx rcx, rdx, r15",
+
+            // j0
+            "mulx rcx, rax, qword ptr [{m_ptr} + 0]",
+            "adox r9, rax",
+            "adcx r10, rcx",
+
+            // j1
+            "mulx rcx, rax, qword ptr [{m_ptr} + 8]",
+            "adox r10, rax",
+            "adcx r11, rcx",
+            // j2
+            "mulx rcx, rax, qword ptr [{m_ptr} + 16]",
+            "adox r11, rax",
+            "adcx r8, rcx",
+            // j3
+            "mulx rcx, rax, qword ptr [{m_ptr} + 24]",
+            "adox r8, rax",
+            "adcx r9, rcx",
+            "adox r9, r12",
+
+            // i2
+            "mov rdx, r10",
+            "mulx rcx, rdx, r15",
+
+            // j0
+            "mulx rcx, rax, qword ptr [{m_ptr} + 0]",
+            "adox r10, rax",
+            "adcx r11, rcx",
+
+            // j1
+            "mulx rcx, rax, qword ptr [{m_ptr} + 8]",
+            "adox r11, rax",
+            "adcx r8, rcx",
+
+            // j2
+            "mulx rcx, rax, qword ptr [{m_ptr} + 16]",
+            "adox r8, rax",
+            "adcx r9, rcx",
+
+            // j3
+            "mulx rcx, rax, qword ptr [{m_ptr} + 24]",
+            "adox r9, rax",
+            "adcx r10, rcx",
+            "adox r10, r12",
+
+            // i3
+            "mov rdx, r11",
+            "mulx rcx, rdx, r15",
+            // j0
+            "mulx rcx, rax, qword ptr [{m_ptr} + 0]",
+            "adox r11, rax",
+            "adcx r8, rcx",
+            // j1
+            "mulx rcx, rax, qword ptr [{m_ptr} + 8]",
+            "adox r8, rax",
+            "adcx r9, rcx",
+            // j2
+            "mulx rcx, rax, qword ptr [{m_ptr} + 16]",
+            "adox r9, rax",
+            "adcx r10, rcx",
+            // j3
+            "mulx rcx, rax, qword ptr [{m_ptr} + 24]",
+            "adox r10, rax",
+            "adcx r11, rcx",
+            "adox r11, r12",
+
+            // modular reduction is not required since:
+            // high(inv * p3) + 2 < p3
+
+            m_ptr = in(reg) m_ptr,
+            a_ptr = in(reg) a_ptr,
+            inv = in(reg) inv,
+
+            out("rax") _,
+            out("rcx") _,
+            out("rdx") _,
+            out("r8") r0,
+            out("r9") r1,
+            out("r10") r2,
+            out("r11") r3,
+            out("r12") _,
+            out("r13") _,
+            out("r14") _,
+            out("r15") _,
+            options(pure, readonly, nostack)
+        );
+    }
+}
