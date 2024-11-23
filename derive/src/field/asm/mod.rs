@@ -190,7 +190,7 @@ pub(crate) fn impl_arith(field: &syn::Ident, num_limbs: usize, inv: u64) -> Toke
                 let res_naive = {#impl_mul};
                 if res_asm != res_naive {
                     println!("Rust impl: {:?}", #field::montgomery_mul(&self.0, &rhs.0, &#field::MODULUS_LIMBS, #inv));
-                    panic!("Bug in ASM: {:?} (asm) != {:?} (expected)\n\nRust Implementation Output: {:?}", res_asm, res_naive, #field::montgomery_mul(&self.0, &rhs.0, &#field::MODULUS_LIMBS, #inv));
+                    panic!("Bug in ASM: {:?} (asm) != {:?} (expected)\n\nRust Implementation Output: {:?}\nASM  Implementation Output: {:?}", res_asm, res_naive, #field::montgomery_mul(&self.0, &rhs.0, &#field::MODULUS_LIMBS, #inv),[r0, r1, r2, r3]);
                 }
 
                 res_asm
@@ -239,44 +239,42 @@ pub(crate) fn impl_arith(field: &syn::Ident, num_limbs: usize, inv: u64) -> Toke
             }
 
             pub fn montgomery_mul(a: &[u64; 4], b: &[u64; 4], m: &[u64; 4], inv: u64) -> [u64; 4] {
+                let mut result = [0u64; 4];
                 // Initialize the result array t[0..5]
-                let mut t = [0u64; 5]; // Extra limb for carry handling
+                let mut t = [0u64; 4]; // Extra limb for carry handling
+                 // Accumulator for the inner product
 
                 // For each limb of b (i from 0 to 3)
                 for i in 0..4 {
-                    let b_i = b[i];
                     let mut A = 0u64;
 
                     // Multiplication step: t[j] += a[j] * b_i + A
                     for j in 0..4 {
-                        let (mul_low, mul_high) = Self::mul_with_carry(a[j], b_i, A);
+                        let (mul_low, mul_high) = Self::mul_with_carry(a[j], b[i], A);
                         let (sum, carry) = Self::add_with_carry(t[j], mul_low, 0);
                         t[j] = sum;
                         A = mul_high + carry;
                     }
-                    // t[4] holds the carry A
-                    t[4] = A;
 
                     // Reduction step
                     // m_coeff = t[0] * inv mod 2^64
                     let m_coeff = t[0].wrapping_mul(inv);
 
-                    // Compute t[0] + m_coeff * m[0]
-                    let (mul_low, mul_high) = Self::mul_with_carry(m_coeff, m[0], 0);
-                    let (sum, carry) = Self::add_with_carry(t[0], mul_low, 0);
-                    // Discard t[0]; it will be overwritten in the next iteration
-                    let mut C = mul_high + carry;
+                    let mut C = 0;
 
                     // For j from 1 to 3
-                    for j in 1..4 {
+                    for j in 0..4 {
                         let (mul_low, mul_high) = Self::mul_with_carry(m_coeff, m[j], 0);
                         let (sum, carry) = Self::add_with_carry(t[j], mul_low, C);
-                        t[j - 1] = sum; // Shifted down by one position
+                        if j > 0 {
+                            t[j - 1] = sum; // Shifted down by one position
+                        }
                         C = mul_high + carry;
+
                     }
 
                     // t[3] = t[4] + C
-                    let (sum, _) = Self::add_with_carry(t[4], C, 0);
+                    let (sum, _) = Self::add_with_carry(A, C, 0);
                     t[3] = sum; // Final limb after reduction
                 }
 
@@ -298,6 +296,8 @@ pub(crate) fn impl_arith(field: &syn::Ident, num_limbs: usize, inv: u64) -> Toke
                     result.copy_from_slice(&t[0..4]);
                     result
                 }
+
+                // result
             }
 
             // Helper functions for arithmetic operations with carry and borrow

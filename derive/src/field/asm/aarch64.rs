@@ -435,7 +435,6 @@ pub(crate) fn impl_mul_asm() -> TokenStream {
             "mov {t1}, xzr",               // t1 = 0
             "mov {t2}, xzr",               // t2 = 0
             "mov {t3}, xzr",               // t3 = 0
-            "mov {t4}, xzr",               // t4 = 0 (extra limb for carry)
 
             // Load Montgomery constant
             "mov {inv_reg}, {inv}",        // inv_reg = inv
@@ -447,317 +446,371 @@ pub(crate) fn impl_mul_asm() -> TokenStream {
             // i = 0
             // ========================
 
-            // Load b[0]
-            "ldr {b_i}, [{b_ptr}, #0]",    // b_i = b[0]
-            // Initialize carry A
-            "mov {A}, xzr",
+            // === Load b[0] ===
+            // Note: This is the only line that differs between loop steps
+            "ldr {b_i}, [{b_ptr}, #0]",   // Load the next limb of b into b_i
+
+            // === Initialize Carry ===
+            "mov {A}, xzr",               // Set carry accumulator A to zero
 
             // Multiplication step
             // For j = 0 to 3
             // Multiply a[j] * b_i and add to t[j] with carry A
-
             // j = 0
-            "ldr {a_j}, [{a_ptr}, #0]",
-            "umulh {mul_hi}, {a_j}, {b_i}",
-            "mul {mul_lo}, {a_j}, {b_i}",
-            "adds {t0}, {t0}, {mul_lo}",   // t0 += a[0]*b_i (lo), set flags
-            "adc {A}, {mul_hi}, xzr",      // A = mul_hi + carry
+            "ldr {a_j}, [{a_ptr}, #0]",     // Load a[0]
+            "umulh {mul_hi}, {a_j}, {b_i}", // High part of a[0] * b[i]
+            "mul {mul_lo}, {a_j}, {b_i}",   // Low part of a[0] * b[i]
+            "adds {mul_lo}, {mul_lo}, {A}", // Add carry (A) to low part
+            "adc {mul_hi}, {mul_hi}, xzr",  // Add carry flag to high part
+            "adds {t0}, {t0}, {mul_lo}",    // Add low part to t[0], set carry flag
+            "adc {A}, {mul_hi}, xzr",       // Add high part + carry flag to A
 
             // j = 1
-            "ldr {a_j}, [{a_ptr}, #8]",
-            "umulh {mul_hi}, {a_j}, {b_i}",
-            "mul {mul_lo}, {a_j}, {b_i}",
-            "adds {t1}, {t1}, {mul_lo}",   // t1 += a[1]*b_i + A (lo)
-            "adc {A}, {A}, {mul_hi}",      // A = A + mul_hi + carry
+            "ldr {a_j}, [{a_ptr}, #8]",     // Load a[1]
+            "umulh {mul_hi}, {a_j}, {b_i}", // High part of a[1] * b[i]
+            "mul {mul_lo}, {a_j}, {b_i}",   // Low part of a[1] * b[i]
+            "adds {mul_lo}, {mul_lo}, {A}", // Add carry (A) to low part
+            "adc {mul_hi}, {mul_hi}, xzr",  // Add carry flag to high part
+            "adds {t1}, {t1}, {mul_lo}",    // Add low part to t[1], set carry flag
+            "adc {A}, {mul_hi}, xzr",       // Add high part + carry flag to A
 
             // j = 2
-            "ldr {a_j}, [{a_ptr}, #16]",
-            "umulh {mul_hi}, {a_j}, {b_i}",
-            "mul {mul_lo}, {a_j}, {b_i}",
-            "adds {t2}, {t2}, {mul_lo}",   // t2 += a[2]*b_i + A (lo)
-            "adc {A}, {A}, {mul_hi}",      // A = A + mul_hi + carry
+            "ldr {a_j}, [{a_ptr}, #16]",    // Load a[2]
+            "umulh {mul_hi}, {a_j}, {b_i}", // High part of a[2] * b[i]
+            "mul {mul_lo}, {a_j}, {b_i}",   // Low part of a[2] * b[i]
+            "adds {mul_lo}, {mul_lo}, {A}", // Add carry (A) to low part
+            "adc {mul_hi}, {mul_hi}, xzr",  // Add carry flag to high part
+            "adds {t2}, {t2}, {mul_lo}",    // Add low part to t[2], set carry flag
+            "adc {A}, {mul_hi}, xzr",       // Add high part + carry flag to A
 
             // j = 3
-            "ldr {a_j}, [{a_ptr}, #24]",
-            "umulh {mul_hi}, {a_j}, {b_i}",
-            "mul {mul_lo}, {a_j}, {b_i}",
-            "adds {t3}, {t3}, {mul_lo}",   // t3 += a[3]*b_i + A (lo)
-            "adc {A}, {A}, {mul_hi}",      // A = A + mul_hi + carry
-
-            // Store carry in t4
-            "adds {t4}, {t4}, {A}",        // t4 += A
+            "ldr {a_j}, [{a_ptr}, #24]",    // Load a[3]
+            "umulh {mul_hi}, {a_j}, {b_i}", // High part of a[3] * b[i]
+            "mul {mul_lo}, {a_j}, {b_i}",   // Low part of a[3] * b[i]
+            "adds {mul_lo}, {mul_lo}, {A}", // Add carry (A) to low part
+            "adc {mul_hi}, {mul_hi}, xzr",  // Add carry flag to high part
+            "adds {t3}, {t3}, {mul_lo}",    // Add low part to t[3], set carry flag
+            "adc {A}, {mul_hi}, xzr",       // Add high part + carry flag to A
 
             // Reduction step
             // Compute m = t0 * inv mod 2^64
             "mul {m}, {t0}, {inv_reg}",    // m = t0 * inv mod 2^64
 
             // Multiply m by modulus and add to t[0..3]
-            // Also shift t[1..4] to t[0..3] for next iteration
 
             // m * m[0]
-            "umulh {mul_hi}, {m}, {m0}",
-            "mul {mul_lo}, {m}, {m0}",
-            "adds {t0}, {t0}, {mul_lo}",   // t0 += m * m0
-            "adc {C}, {mul_hi}, xzr",      // C = mul_hi + carry
+            "umulh {mul_hi}, {m}, {m0}",    // High part of m * m0
+            "mul {mul_lo}, {m}, {m0}",      // Low part of m * m0
+            "adds {t0}, {t0}, {mul_lo}",    // Add low part to t[0] (t[0] is used as a placeholder as it is anyway overridden on next step)
+            "adc {C}, {mul_hi}, xzr",       // C = mul_hi + carry
 
             // m * m[1]
-            "umulh {mul_hi}, {m}, {m1}",
-            "mul {mul_lo}, {m}, {m1}",
-            "adds {t1}, {t1}, {mul_lo}",   // t1 += m * m1 + C
-            "adc {C}, {C}, {mul_hi}",      // C = C + mul_hi + carry
+            "umulh {mul_hi}, {m}, {m1}",    // High part of m * m1
+            "mul {mul_lo}, {m}, {m1}",      // Low part of m * m1
+            "adds {t0}, {t1}, {C}",          // Set carry C to t[0] (shift down)
+            "adc {C}, {mul_hi}, xzr",       // Add high part + carry to C
+            "adds {t0}, {t0}, {mul_lo}",    // Add low part of m * m1 to t[1], set carry
+            "adc {C}, {C}, xzr",            // Update C with carry from addition
 
             // m * m[2]
-            "umulh {mul_hi}, {m}, {m2}",
-            "mul {mul_lo}, {m}, {m2}",
-            "adds {t2}, {t2}, {mul_lo}",   // t2 += m * m2 + C
-            "adc {C}, {C}, {mul_hi}",      // C = C + mul_hi + carry
+            "umulh {mul_hi}, {m}, {m2}",    // High part of m * m2
+            "mul {mul_lo}, {m}, {m2}",      // Low part of m * m2
+            "adds {t1}, {t2}, {C}",          // Set carry C to t[1] (shift down)
+            "adc {C}, {mul_hi}, xzr",       // Add high part + carry to C
+            "adds {t1}, {t1}, {mul_lo}",    // Add low part of m * m2 to t[2], set carry
+            "adc {C}, {C}, xzr",            // Update C with carry from addition
+
 
             // m * m[3]
-            "umulh {mul_hi}, {m}, {m3}",
-            "mul {mul_lo}, {m}, {m3}",
-            "adds {t3}, {t3}, {mul_lo}",   // t3 += m * m3 + C
-            "adc {C}, {C}, {mul_hi}",      // C = C + mul_hi + carry
+            "umulh {mul_hi}, {m}, {m3}",    // High part of m * m3
+            "mul {mul_lo}, {m}, {m3}",      // Low part of m * m3
+            "adds {t2}, {t3}, {C}",         // Set carry C to t[2] (shift down)
+            "adc {C}, {mul_hi}, xzr",       // Add high part + carry to C
+            "adds {t2}, {t2}, {mul_lo}",    // Add low part of m * m3 to t[3], set carry
+            "adc {C}, {C}, xzr",            // Update C with carry from addition
 
-            // Add C to t4
-            "adds {t4}, {t4}, {C}",        // t4 += C
+            // Add C to t3
+            "add {t3}, {A}, {C}",         // t3 += C
 
-            // Shift t[1..4] to t[0..3] for next iteration
-            "mov {t0}, {t1}",
-            "mov {t1}, {t2}",
-            "mov {t2}, {t3}",
-            "mov {t3}, {t4}",
-            "mov {t4}, xzr",               // Reset t4
 
-            // Repeat for i = 1 to 3
             // ========================
             // i = 1
             // ========================
 
-            // Load b[1]
-            "ldr {b_i}, [{b_ptr}, #8]",    // b_i = b[1]
-            // Initialize carry A
-            "mov {A}, xzr",
+            // === Load b[1] ===
+            // Note: This is the only line that differs between loop steps
+            "ldr {b_i}, [{b_ptr}, #8]",   // Load the next limb of b into b_i
+
+            // === Initialize Carry ===
+            "mov {A}, xzr",               // Set carry accumulator A to zero
 
             // Multiplication step
+            // For j = 0 to 3
+            // Multiply a[j] * b_i and add to t[j] with carry A
             // j = 0
-            "ldr {a_j}, [{a_ptr}, #0]",
-            "umulh {mul_hi}, {a_j}, {b_i}",
-            "mul {mul_lo}, {a_j}, {b_i}",
-            "adds {t0}, {t0}, {mul_lo}",   // t0 += a[0]*b_i
-            "adc {A}, {mul_hi}, xzr",
+            "ldr {a_j}, [{a_ptr}, #0]",     // Load a[0]
+            "umulh {mul_hi}, {a_j}, {b_i}", // High part of a[0] * b[i]
+            "mul {mul_lo}, {a_j}, {b_i}",   // Low part of a[0] * b[i]
+            "adds {mul_lo}, {mul_lo}, {A}", // Add carry (A) to low part
+            "adc {mul_hi}, {mul_hi}, xzr",  // Add carry flag to high part
+            "adds {t0}, {t0}, {mul_lo}",    // Add low part to t[0], set carry flag
+            "adc {A}, {mul_hi}, xzr",       // Add high part + carry flag to A
 
             // j = 1
-            "ldr {a_j}, [{a_ptr}, #8]",
-            "umulh {mul_hi}, {a_j}, {b_i}",
-            "mul {mul_lo}, {a_j}, {b_i}",
-            "adds {t1}, {t1}, {mul_lo}",   // t1 += a[1]*b_i + A
-            "adc {A}, {A}, {mul_hi}",
+            "ldr {a_j}, [{a_ptr}, #8]",     // Load a[1]
+            "umulh {mul_hi}, {a_j}, {b_i}", // High part of a[1] * b[i]
+            "mul {mul_lo}, {a_j}, {b_i}",   // Low part of a[1] * b[i]
+            "adds {mul_lo}, {mul_lo}, {A}", // Add carry (A) to low part
+            "adc {mul_hi}, {mul_hi}, xzr",  // Add carry flag to high part
+            "adds {t1}, {t1}, {mul_lo}",    // Add low part to t[1], set carry flag
+            "adc {A}, {mul_hi}, xzr",       // Add high part + carry flag to A
 
             // j = 2
-            "ldr {a_j}, [{a_ptr}, #16]",
-            "umulh {mul_hi}, {a_j}, {b_i}",
-            "mul {mul_lo}, {a_j}, {b_i}",
-            "adds {t2}, {t2}, {mul_lo}",
-            "adc {A}, {A}, {mul_hi}",
+            "ldr {a_j}, [{a_ptr}, #16]",    // Load a[2]
+            "umulh {mul_hi}, {a_j}, {b_i}", // High part of a[2] * b[i]
+            "mul {mul_lo}, {a_j}, {b_i}",   // Low part of a[2] * b[i]
+            "adds {mul_lo}, {mul_lo}, {A}", // Add carry (A) to low part
+            "adc {mul_hi}, {mul_hi}, xzr",  // Add carry flag to high part
+            "adds {t2}, {t2}, {mul_lo}",    // Add low part to t[2], set carry flag
+            "adc {A}, {mul_hi}, xzr",       // Add high part + carry flag to A
 
             // j = 3
-            "ldr {a_j}, [{a_ptr}, #24]",
-            "umulh {mul_hi}, {a_j}, {b_i}",
-            "mul {mul_lo}, {a_j}, {b_i}",
-            "adds {t3}, {t3}, {mul_lo}",
-            "adc {A}, {A}, {mul_hi}",
-
-            // Store carry in t4
-            "adds {t4}, {t4}, {A}",
+            "ldr {a_j}, [{a_ptr}, #24]",    // Load a[3]
+            "umulh {mul_hi}, {a_j}, {b_i}", // High part of a[3] * b[i]
+            "mul {mul_lo}, {a_j}, {b_i}",   // Low part of a[3] * b[i]
+            "adds {mul_lo}, {mul_lo}, {A}", // Add carry (A) to low part
+            "adc {mul_hi}, {mul_hi}, xzr",  // Add carry flag to high part
+            "adds {t3}, {t3}, {mul_lo}",    // Add low part to t[3], set carry flag
+            "adc {A}, {mul_hi}, xzr",       // Add high part + carry flag to A
 
             // Reduction step
             // Compute m = t0 * inv mod 2^64
-            "mul {m}, {t0}, {inv_reg}",
+            "mul {m}, {t0}, {inv_reg}",    // m = t0 * inv mod 2^64
+
+            // Multiply m by modulus and add to t[0..3]
 
             // m * m[0]
-            "umulh {mul_hi}, {m}, {m0}",
-            "mul {mul_lo}, {m}, {m0}",
-            "adds {t0}, {t0}, {mul_lo}",
-            "adc {C}, {mul_hi}, xzr",
+            "umulh {mul_hi}, {m}, {m0}",    // High part of m * m0
+            "mul {mul_lo}, {m}, {m0}",      // Low part of m * m0
+            "adds {t0}, {t0}, {mul_lo}",    // Add low part to t[0] (t[0] is used as a placeholder as it is anyway overridden on next step)
+            "adc {C}, {mul_hi}, xzr",       // C = mul_hi + carry
 
             // m * m[1]
-            "umulh {mul_hi}, {m}, {m1}",
-            "mul {mul_lo}, {m}, {m1}",
-            "adds {t1}, {t1}, {mul_lo}",
-            "adc {C}, {C}, {mul_hi}",
+            "umulh {mul_hi}, {m}, {m1}",    // High part of m * m1
+            "mul {mul_lo}, {m}, {m1}",      // Low part of m * m1
+            "adds {t0}, {t1}, {C}",          // Set carry C to t[0] (shift down)
+            "adc {C}, {mul_hi}, xzr",       // Add high part + carry to C
+            "adds {t0}, {t0}, {mul_lo}",    // Add low part of m * m1 to t[1], set carry
+            "adc {C}, {C}, xzr",            // Update C with carry from addition
 
             // m * m[2]
-            "umulh {mul_hi}, {m}, {m2}",
-            "mul {mul_lo}, {m}, {m2}",
-            "adds {t2}, {t2}, {mul_lo}",
-            "adc {C}, {C}, {mul_hi}",
+            "umulh {mul_hi}, {m}, {m2}",    // High part of m * m2
+            "mul {mul_lo}, {m}, {m2}",      // Low part of m * m2
+            "adds {t1}, {t2}, {C}",          // Set carry C to t[1] (shift down)
+            "adc {C}, {mul_hi}, xzr",       // Add high part + carry to C
+            "adds {t1}, {t1}, {mul_lo}",    // Add low part of m * m2 to t[2], set carry
+            "adc {C}, {C}, xzr",            // Update C with carry from addition
+
 
             // m * m[3]
-            "umulh {mul_hi}, {m}, {m3}",
-            "mul {mul_lo}, {m}, {m3}",
-            "adds {t3}, {t3}, {mul_lo}",
-            "adc {C}, {C}, {mul_hi}",
+            "umulh {mul_hi}, {m}, {m3}",    // High part of m * m3
+            "mul {mul_lo}, {m}, {m3}",      // Low part of m * m3
+            "adds {t2}, {t3}, {C}",         // Set carry C to t[2] (shift down)
+            "adc {C}, {mul_hi}, xzr",       // Add high part + carry to C
+            "adds {t2}, {t2}, {mul_lo}",    // Add low part of m * m3 to t[3], set carry
+            "adc {C}, {C}, xzr",            // Update C with carry from addition
 
-            // Add C to t4
-            "adds {t4}, {t4}, {C}",
+            // Add C to t3
+            "add {t3}, {A}, {C}",         // t3 += C
 
-            // Shift t[1..4] to t[0..3]
-            "mov {t0}, {t1}",
-            "mov {t1}, {t2}",
-            "mov {t2}, {t3}",
-            "mov {t3}, {t4}",
-            "mov {t4}, xzr",
 
             // ========================
             // i = 2
             // ========================
 
-            // Load b[2]
-            "ldr {b_i}, [{b_ptr}, #16]",    // b_i = b[2]
-            // Initialize carry A
-            "mov {A}, xzr",
+            // === Load b[2] ===
+            // Note: This is the only line that differs between loop steps
+            "ldr {b_i}, [{b_ptr}, #16]",   // Load the next limb of b into b_i
+
+            // === Initialize Carry ===
+            "mov {A}, xzr",               // Set carry accumulator A to zero
 
             // Multiplication step
+            // For j = 0 to 3
+            // Multiply a[j] * b_i and add to t[j] with carry A
             // j = 0
-            "ldr {a_j}, [{a_ptr}, #0]",
-            "umulh {mul_hi}, {a_j}, {b_i}",
-            "mul {mul_lo}, {a_j}, {b_i}",
-            "adds {t0}, {t0}, {mul_lo}",
-            "adc {A}, {mul_hi}, xzr",
+            "ldr {a_j}, [{a_ptr}, #0]",     // Load a[0]
+            "umulh {mul_hi}, {a_j}, {b_i}", // High part of a[0] * b[i]
+            "mul {mul_lo}, {a_j}, {b_i}",   // Low part of a[0] * b[i]
+            "adds {mul_lo}, {mul_lo}, {A}", // Add carry (A) to low part
+            "adc {mul_hi}, {mul_hi}, xzr",  // Add carry flag to high part
+            "adds {t0}, {t0}, {mul_lo}",    // Add low part to t[0], set carry flag
+            "adc {A}, {mul_hi}, xzr",       // Add high part + carry flag to A
 
             // j = 1
-            "ldr {a_j}, [{a_ptr}, #8]",
-            "umulh {mul_hi}, {a_j}, {b_i}",
-            "mul {mul_lo}, {a_j}, {b_i}",
-            "adds {t1}, {t1}, {mul_lo}",
-            "adc {A}, {A}, {mul_hi}",
+            "ldr {a_j}, [{a_ptr}, #8]",     // Load a[1]
+            "umulh {mul_hi}, {a_j}, {b_i}", // High part of a[1] * b[i]
+            "mul {mul_lo}, {a_j}, {b_i}",   // Low part of a[1] * b[i]
+            "adds {mul_lo}, {mul_lo}, {A}", // Add carry (A) to low part
+            "adc {mul_hi}, {mul_hi}, xzr",  // Add carry flag to high part
+            "adds {t1}, {t1}, {mul_lo}",    // Add low part to t[1], set carry flag
+            "adc {A}, {mul_hi}, xzr",       // Add high part + carry flag to A
 
             // j = 2
-            "ldr {a_j}, [{a_ptr}, #16]",
-            "umulh {mul_hi}, {a_j}, {b_i}",
-            "mul {mul_lo}, {a_j}, {b_i}",
-            "adds {t2}, {t2}, {mul_lo}",
-            "adc {A}, {A}, {mul_hi}",
+            "ldr {a_j}, [{a_ptr}, #16]",    // Load a[2]
+            "umulh {mul_hi}, {a_j}, {b_i}", // High part of a[2] * b[i]
+            "mul {mul_lo}, {a_j}, {b_i}",   // Low part of a[2] * b[i]
+            "adds {mul_lo}, {mul_lo}, {A}", // Add carry (A) to low part
+            "adc {mul_hi}, {mul_hi}, xzr",  // Add carry flag to high part
+            "adds {t2}, {t2}, {mul_lo}",    // Add low part to t[2], set carry flag
+            "adc {A}, {mul_hi}, xzr",       // Add high part + carry flag to A
 
             // j = 3
-            "ldr {a_j}, [{a_ptr}, #24]",
-            "umulh {mul_hi}, {a_j}, {b_i}",
-            "mul {mul_lo}, {a_j}, {b_i}",
-            "adds {t3}, {t3}, {mul_lo}",
-            "adc {A}, {A}, {mul_hi}",
-
-            // Store carry in t4
-            "adds {t4}, {t4}, {A}",
+            "ldr {a_j}, [{a_ptr}, #24]",    // Load a[3]
+            "umulh {mul_hi}, {a_j}, {b_i}", // High part of a[3] * b[i]
+            "mul {mul_lo}, {a_j}, {b_i}",   // Low part of a[3] * b[i]
+            "adds {mul_lo}, {mul_lo}, {A}", // Add carry (A) to low part
+            "adc {mul_hi}, {mul_hi}, xzr",  // Add carry flag to high part
+            "adds {t3}, {t3}, {mul_lo}",    // Add low part to t[3], set carry flag
+            "adc {A}, {mul_hi}, xzr",       // Add high part + carry flag to A
 
             // Reduction step
             // Compute m = t0 * inv mod 2^64
-            "mul {m}, {t0}, {inv_reg}",
+            "mul {m}, {t0}, {inv_reg}",    // m = t0 * inv mod 2^64
+
+            // Multiply m by modulus and add to t[0..3]
 
             // m * m[0]
-            "umulh {mul_hi}, {m}, {m0}",
-            "mul {mul_lo}, {m}, {m0}",
-            "adds {t0}, {t0}, {mul_lo}",
-            "adc {C}, {mul_hi}, xzr",
+            "umulh {mul_hi}, {m}, {m0}",    // High part of m * m0
+            "mul {mul_lo}, {m}, {m0}",      // Low part of m * m0
+            "adds {t0}, {t0}, {mul_lo}",    // Add low part to t[0] (t[0] is used as a placeholder as it is anyway overridden on next step)
+            "adc {C}, {mul_hi}, xzr",       // C = mul_hi + carry
 
             // m * m[1]
-            "umulh {mul_hi}, {m}, {m1}",
-            "mul {mul_lo}, {m}, {m1}",
-            "adds {t1}, {t1}, {mul_lo}",
-            "adc {C}, {C}, {mul_hi}",
+            "umulh {mul_hi}, {m}, {m1}",    // High part of m * m1
+            "mul {mul_lo}, {m}, {m1}",      // Low part of m * m1
+            "adds {t0}, {t1}, {C}",          // Set carry C to t[0] (shift down)
+            "adc {C}, {mul_hi}, xzr",       // Add high part + carry to C
+            "adds {t0}, {t0}, {mul_lo}",    // Add low part of m * m1 to t[1], set carry
+            "adc {C}, {C}, xzr",            // Update C with carry from addition
 
             // m * m[2]
-            "umulh {mul_hi}, {m}, {m2}",
-            "mul {mul_lo}, {m}, {m2}",
-            "adds {t2}, {t2}, {mul_lo}",
-            "adc {C}, {C}, {mul_hi}",
+            "umulh {mul_hi}, {m}, {m2}",    // High part of m * m2
+            "mul {mul_lo}, {m}, {m2}",      // Low part of m * m2
+            "adds {t1}, {t2}, {C}",          // Set carry C to t[1] (shift down)
+            "adc {C}, {mul_hi}, xzr",       // Add high part + carry to C
+            "adds {t1}, {t1}, {mul_lo}",    // Add low part of m * m2 to t[2], set carry
+            "adc {C}, {C}, xzr",            // Update C with carry from addition
+
 
             // m * m[3]
-            "umulh {mul_hi}, {m}, {m3}",
-            "mul {mul_lo}, {m}, {m3}",
-            "adds {t3}, {t3}, {mul_lo}",
-            "adc {C}, {C}, {mul_hi}",
+            "umulh {mul_hi}, {m}, {m3}",    // High part of m * m3
+            "mul {mul_lo}, {m}, {m3}",      // Low part of m * m3
+            "adds {t2}, {t3}, {C}",         // Set carry C to t[2] (shift down)
+            "adc {C}, {mul_hi}, xzr",       // Add high part + carry to C
+            "adds {t2}, {t2}, {mul_lo}",    // Add low part of m * m3 to t[3], set carry
+            "adc {C}, {C}, xzr",            // Update C with carry from addition
 
-            // Add C to t4
-            "adds {t4}, {t4}, {C}",
+            // Add C to t3
+            "add {t3}, {A}, {C}",         // t3 += C
 
-            // Shift t[1..4] to t[0..3]
-            "mov {t0}, {t1}",
-            "mov {t1}, {t2}",
-            "mov {t2}, {t3}",
-            "mov {t3}, {t4}",
-            "mov {t4}, xzr",
 
             // ========================
             // i = 3
             // ========================
 
-            // Load b[3]
-            "ldr {b_i}, [{b_ptr}, #24]",    // b_i = b[3]
-            // Initialize carry A
-            "mov {A}, xzr",
+            // === Load b[3] ===
+            // Note: This is the only line that differs between loop steps
+            "ldr {b_i}, [{b_ptr}, #24]",   // Load the next limb of b into b_i
+
+            // === Initialize Carry ===
+            "mov {A}, xzr",               // Set carry accumulator A to zero
 
             // Multiplication step
+            // For j = 0 to 3
+            // Multiply a[j] * b_i and add to t[j] with carry A
             // j = 0
-            "ldr {a_j}, [{a_ptr}, #0]",
-            "umulh {mul_hi}, {a_j}, {b_i}",
-            "mul {mul_lo}, {a_j}, {b_i}",
-            "adds {t0}, {t0}, {mul_lo}",
-            "adc {A}, {mul_hi}, xzr",
+            "ldr {a_j}, [{a_ptr}, #0]",     // Load a[0]
+            "umulh {mul_hi}, {a_j}, {b_i}", // High part of a[0] * b[i]
+            "mul {mul_lo}, {a_j}, {b_i}",   // Low part of a[0] * b[i]
+            "adds {mul_lo}, {mul_lo}, {A}", // Add carry (A) to low part
+            "adc {mul_hi}, {mul_hi}, xzr",  // Add carry flag to high part
+            "adds {t0}, {t0}, {mul_lo}",    // Add low part to t[0], set carry flag
+            "adc {A}, {mul_hi}, xzr",       // Add high part + carry flag to A
 
             // j = 1
-            "ldr {a_j}, [{a_ptr}, #8]",
-            "umulh {mul_hi}, {a_j}, {b_i}",
-            "mul {mul_lo}, {a_j}, {b_i}",
-            "adds {t1}, {t1}, {mul_lo}",
-            "adc {A}, {A}, {mul_hi}",
+            "ldr {a_j}, [{a_ptr}, #8]",     // Load a[1]
+            "umulh {mul_hi}, {a_j}, {b_i}", // High part of a[1] * b[i]
+            "mul {mul_lo}, {a_j}, {b_i}",   // Low part of a[1] * b[i]
+            "adds {mul_lo}, {mul_lo}, {A}", // Add carry (A) to low part
+            "adc {mul_hi}, {mul_hi}, xzr",  // Add carry flag to high part
+            "adds {t1}, {t1}, {mul_lo}",    // Add low part to t[1], set carry flag
+            "adc {A}, {mul_hi}, xzr",       // Add high part + carry flag to A
 
             // j = 2
-            "ldr {a_j}, [{a_ptr}, #16]",
-            "umulh {mul_hi}, {a_j}, {b_i}",
-            "mul {mul_lo}, {a_j}, {b_i}",
-            "adds {t2}, {t2}, {mul_lo}",
-            "adc {A}, {A}, {mul_hi}",
+            "ldr {a_j}, [{a_ptr}, #16]",    // Load a[2]
+            "umulh {mul_hi}, {a_j}, {b_i}", // High part of a[2] * b[i]
+            "mul {mul_lo}, {a_j}, {b_i}",   // Low part of a[2] * b[i]
+            "adds {mul_lo}, {mul_lo}, {A}", // Add carry (A) to low part
+            "adc {mul_hi}, {mul_hi}, xzr",  // Add carry flag to high part
+            "adds {t2}, {t2}, {mul_lo}",    // Add low part to t[2], set carry flag
+            "adc {A}, {mul_hi}, xzr",       // Add high part + carry flag to A
 
             // j = 3
-            "ldr {a_j}, [{a_ptr}, #24]",
-            "umulh {mul_hi}, {a_j}, {b_i}",
-            "mul {mul_lo}, {a_j}, {b_i}",
-            "adds {t3}, {t3}, {mul_lo}",
-            "adc {A}, {A}, {mul_hi}",
-
-            // Store carry in t4
-            "adds {t4}, {t4}, {A}",
+            "ldr {a_j}, [{a_ptr}, #24]",    // Load a[3]
+            "umulh {mul_hi}, {a_j}, {b_i}", // High part of a[3] * b[i]
+            "mul {mul_lo}, {a_j}, {b_i}",   // Low part of a[3] * b[i]
+            "adds {mul_lo}, {mul_lo}, {A}", // Add carry (A) to low part
+            "adc {mul_hi}, {mul_hi}, xzr",  // Add carry flag to high part
+            "adds {t3}, {t3}, {mul_lo}",    // Add low part to t[3], set carry flag
+            "adc {A}, {mul_hi}, xzr",       // Add high part + carry flag to A
 
             // Reduction step
             // Compute m = t0 * inv mod 2^64
-            "mul {m}, {t0}, {inv_reg}",
+            "mul {m}, {t0}, {inv_reg}",    // m = t0 * inv mod 2^64
+
+            // Multiply m by modulus and add to t[0..3]
 
             // m * m[0]
-            "umulh {mul_hi}, {m}, {m0}",
-            "mul {mul_lo}, {m}, {m0}",
-            "adds {t0}, {t0}, {mul_lo}",
-            "adc {C}, {mul_hi}, xzr",
+            "umulh {mul_hi}, {m}, {m0}",    // High part of m * m0
+            "mul {mul_lo}, {m}, {m0}",      // Low part of m * m0
+            "adds {t0}, {t0}, {mul_lo}",    // Add low part to t[0] (t[0] is used as a placeholder as it is anyway overridden on next step)
+            "adc {C}, {mul_hi}, xzr",       // C = mul_hi + carry
 
             // m * m[1]
-            "umulh {mul_hi}, {m}, {m1}",
-            "mul {mul_lo}, {m}, {m1}",
-            "adds {t1}, {t1}, {mul_lo}",
-            "adc {C}, {C}, {mul_hi}",
+            "umulh {mul_hi}, {m}, {m1}",    // High part of m * m1
+            "mul {mul_lo}, {m}, {m1}",      // Low part of m * m1
+            "adds {t0}, {t1}, {C}",          // Set carry C to t[0] (shift down)
+            "adc {C}, {mul_hi}, xzr",       // Add high part + carry to C
+            "adds {t0}, {t0}, {mul_lo}",    // Add low part of m * m1 to t[1], set carry
+            "adc {C}, {C}, xzr",            // Update C with carry from addition
 
             // m * m[2]
-            "umulh {mul_hi}, {m}, {m2}",
-            "mul {mul_lo}, {m}, {m2}",
-            "adds {t2}, {t2}, {mul_lo}",
-            "adc {C}, {C}, {mul_hi}",
+            "umulh {mul_hi}, {m}, {m2}",    // High part of m * m2
+            "mul {mul_lo}, {m}, {m2}",      // Low part of m * m2
+            "adds {t1}, {t2}, {C}",          // Set carry C to t[1] (shift down)
+            "adc {C}, {mul_hi}, xzr",       // Add high part + carry to C
+            "adds {t1}, {t1}, {mul_lo}",    // Add low part of m * m2 to t[2], set carry
+            "adc {C}, {C}, xzr",            // Update C with carry from addition
+
 
             // m * m[3]
-            "umulh {mul_hi}, {m}, {m3}",
-            "mul {mul_lo}, {m}, {m3}",
-            "adds {t3}, {t3}, {mul_lo}",
-            "adc {C}, {C}, {mul_hi}",
+            "umulh {mul_hi}, {m}, {m3}",    // High part of m * m3
+            "mul {mul_lo}, {m}, {m3}",      // Low part of m * m3
+            "adds {t2}, {t3}, {C}",         // Set carry C to t[2] (shift down)
+            "adc {C}, {mul_hi}, xzr",       // Add high part + carry to C
+            "adds {t2}, {t2}, {mul_lo}",    // Add low part of m * m3 to t[3], set carry
+            "adc {C}, {C}, xzr",            // Update C with carry from addition
 
-            // Add C to t4
-            "adds {t4}, {t4}, {C}",
+            // Add C to t3
+            "add {t3}, {A}, {C}",         // t3 += C
+
+
+            // // TEMPORARY SHIFT ALL T INTO THE R FOR RESULT
+            // "mov {r0}, {t0}",
+            // "mov {r1}, {t1}",
+            // "mov {r2}, {t2}",
+            // "mov {r3}, {t3}",
 
             // Final result is in t0..t3
             // Need to subtract modulus if t >= m
@@ -772,10 +825,10 @@ pub(crate) fn impl_mul_asm() -> TokenStream {
             // Conditional select: if borrow is 0, result is r0..r3
             // Otherwise, result is t0..t3
 
-            "csel {r0}, {r0}, {t0}, lo",   // If borrow == 0, keep r0; else t0
-            "csel {r1}, {r1}, {t1}, lo",
-            "csel {r2}, {r2}, {t2}, lo",
-            "csel {r3}, {r3}, {t3}, lo",
+            "csel {r0}, {r0}, {t0}, hs",   // If borrow == 0, keep r0; else t0
+            "csel {r1}, {r1}, {t1}, hs",
+            "csel {r2}, {r2}, {t2}, hs",
+            "csel {r3}, {r3}, {t3}, hs",
 
             // Outputs
             a_ptr = in(reg) a_ptr,
@@ -794,7 +847,6 @@ pub(crate) fn impl_mul_asm() -> TokenStream {
             t1 = out(reg) _,
             t2 = out(reg) _,
             t3 = out(reg) _,
-            t4 = out(reg) _,
             a_j = out(reg) _,
             b_i = out(reg) _,
             m0 = out(reg) _,
