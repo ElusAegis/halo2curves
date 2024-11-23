@@ -38,7 +38,6 @@ pub(crate) fn impl_arith(field: &syn::Ident, num_limbs: usize, inv: u64) -> Toke
     let impl_mont = crate::field::arith::impl_mont(field, num_limbs, inv);
     let impl_from_mont = crate::field::arith::impl_from_mont(field, num_limbs, inv);
     let impl_mul = crate::field::arith::impl_mul(field, num_limbs, false);
-    let impl_square = crate::field::arith::impl_square(field, num_limbs);
     let wide_num_limbs = num_limbs * 2;
 
     quote::quote! {
@@ -189,8 +188,7 @@ pub(crate) fn impl_arith(field: &syn::Ident, num_limbs: usize, inv: u64) -> Toke
                 // TODO - remove this check in production
                 let res_naive = {#impl_mul};
                 if res_asm != res_naive {
-                    println!("Rust impl: {:?}", #field::montgomery_mul(&self.0, &rhs.0, &#field::MODULUS_LIMBS, #inv));
-                    panic!("Bug in ASM: {:?} (asm) != {:?} (expected)\n\nRust Implementation Output: {:?}\nASM  Implementation Output: {:?}", res_asm, res_naive, #field::montgomery_mul(&self.0, &rhs.0, &#field::MODULUS_LIMBS, #inv),[r0, r1, r2, r3]);
+                    panic!("Bug in ASM: {:?} (asm) != {:?} (expected)", res_asm, res_naive);
                 }
 
                 res_asm
@@ -201,7 +199,7 @@ pub(crate) fn impl_arith(field: &syn::Ident, num_limbs: usize, inv: u64) -> Toke
                 self.mul(self)
             }
 
-            // TODO - remove in production
+            // TODO - remove in production as only needed by impl_from_mont
             #[inline(always)]
             pub(crate) fn montgomery_reduce(r: &[u64; #wide_num_limbs]) -> Self {
                 #impl_mont
@@ -236,68 +234,6 @@ pub(crate) fn impl_arith(field: &syn::Ident, num_limbs: usize, inv: u64) -> Toke
                 }
 
                 res_asm
-            }
-
-            pub fn montgomery_mul(a: &[u64; 4], b: &[u64; 4], m: &[u64; 4], inv: u64) -> [u64; 4] {
-                let mut result = [0u64; 4];
-                // Initialize the result array t[0..5]
-                let mut t = [0u64; 4]; // Extra limb for carry handling
-                 // Accumulator for the inner product
-
-                // For each limb of b (i from 0 to 3)
-                for i in 0..4 {
-                    let mut A = 0u64;
-
-                    // Multiplication step: t[j] += a[j] * b_i + A
-                    for j in 0..4 {
-                        let (mul_low, mul_high) = Self::mul_with_carry(a[j], b[i], A);
-                        let (sum, carry) = Self::add_with_carry(t[j], mul_low, 0);
-                        t[j] = sum;
-                        A = mul_high + carry;
-                    }
-
-                    // Reduction step
-                    // m_coeff = t[0] * inv mod 2^64
-                    let m_coeff = t[0].wrapping_mul(inv);
-
-                    let mut C = 0;
-
-                    // For j from 1 to 3
-                    for j in 0..4 {
-                        let (mul_low, mul_high) = Self::mul_with_carry(m_coeff, m[j], 0);
-                        let (sum, carry) = Self::add_with_carry(t[j], mul_low, C);
-                        if j > 0 {
-                            t[j - 1] = sum; // Shifted down by one position
-                        }
-                        C = mul_high + carry;
-
-                    }
-
-                    // t[3] = t[4] + C
-                    let (sum, _) = Self::add_with_carry(A, C, 0);
-                    t[3] = sum; // Final limb after reduction
-                }
-
-                // Final subtraction: if t >= m, subtract m
-                let mut result = [0u64; 4];
-                let mut borrow = 0u64;
-                for i in 0..4 {
-                    let (res, b) = Self::sub_with_borrow(t[i], m[i], borrow);
-                    result[i] = res;
-                    borrow = b;
-                }
-
-                // If borrow is zero, result = t - m
-                // If borrow is non-zero, result = t[0..3]
-                if borrow == 0 {
-                    result
-                } else {
-                    // Result is t[0..3]
-                    result.copy_from_slice(&t[0..4]);
-                    result
-                }
-
-                // result
             }
 
             // Helper functions for arithmetic operations with carry and borrow
