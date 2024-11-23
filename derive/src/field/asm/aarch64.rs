@@ -252,6 +252,7 @@ pub(crate) fn impl_double_asm() -> TokenStream {
     }
 }
 
+// TODO - check the high part carry situation
 pub(crate) fn impl_from_mont_asm() -> TokenStream {
     quote::quote! {
         std::arch::asm!(
@@ -296,7 +297,10 @@ pub(crate) fn impl_from_mont_asm() -> TokenStream {
             "adcs {r2}, {r2}, {l}",       // r2 = r2 + t2, set flags
             // j = 3
             "mul {l}, {m}, {m3}",         // t3 = m * m[3] (low)
-            "adc {r3}, {r3}, {l}",       // r3 = r3 + t3, set flags
+            "adcs {r3}, {r3}, {l}",       // r3 = r3 + t3, set flags
+
+            // Low part carry
+            "adc {r0}, {r0}, xzr",
 
             // High part next:
             // j = 0
@@ -323,7 +327,9 @@ pub(crate) fn impl_from_mont_asm() -> TokenStream {
             "mul {l}, {m}, {m2}",
             "adcs {r3}, {r3}, {l}",
             "mul {l}, {m}, {m3}",
-            "adc {r0}, {r0}, {l}",
+            "adcs {r0}, {r0}, {l}",
+            // Low part carry
+            "adc {r1}, {r1}, xzr",
             // High part
             "umulh {h}, {m}, {m0}",
             "adds {r2}, {r2}, {h}",
@@ -344,7 +350,9 @@ pub(crate) fn impl_from_mont_asm() -> TokenStream {
             "mul {l}, {m}, {m2}",
             "adcs {r0}, {r0}, {l}",
             "mul {l}, {m}, {m3}",
-            "adc {r1}, {r1}, {l}",
+            "adcs {r1}, {r1}, {l}",
+            // Low part carry
+            "adc {r2}, {r2}, xzr",
             // High part
             "umulh {h}, {m}, {m0}",
             "adds {r3}, {r3}, {h}",
@@ -365,7 +373,9 @@ pub(crate) fn impl_from_mont_asm() -> TokenStream {
             "mul {l}, {m}, {m2}",
             "adcs {r1}, {r1}, {l}",
             "mul {l}, {m}, {m3}",
-            "adc {r2}, {r2}, {l}",
+            "adcs {r2}, {r2}, {l}",
+            // Low part carry
+            "adc {r3}, {r3}, xzr",
             // High part
             "umulh {h}, {m}, {m0}",
             "adds {r0}, {r0}, {h}",

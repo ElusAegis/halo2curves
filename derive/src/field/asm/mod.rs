@@ -20,6 +20,9 @@ pub(crate) fn impl_arith(field: &syn::Ident, num_limbs: usize, inv: u64) -> Toke
     let impl_double_asm_x86_64 = x86_64::impl_double_asm();
     let impl_double_asm_aarch64 = aarch64::impl_double_asm();
 
+    let impl_from_mont_asm_x86_64 = x86_64::impl_from_mont_asm();
+    let impl_from_mont_asm_aarch64 = aarch64::impl_from_mont_asm();
+
     #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
     {
         compile_error!("Unsupported architecture for optimized field arithmetic.");
@@ -173,9 +176,37 @@ pub(crate) fn impl_arith(field: &syn::Ident, num_limbs: usize, inv: u64) -> Toke
                 #impl_mont
             }
 
+            /// Converts this field element from Montgomery form back to standard representation.
             #[inline(always)]
             pub(crate) fn from_mont(&self) -> [u64; #num_limbs] {
                 #impl_from_mont
+            pub(crate) fn from_mont(&self) -> [u64; Self::NUM_LIMBS] {
+                let mut r0: u64;
+                let mut r1: u64;
+                let mut r2: u64;
+                let mut r3: u64;
+
+                let a_ptr: *const u64 = self.0.as_ptr();
+                let m_ptr: *const u64 = #field::MODULUS_LIMBS.as_ptr();
+                let inv = #inv as u64;
+
+                unsafe {
+                    #[cfg(target_arch = "x86_64")]
+                    #impl_from_mont_asm_x86_64
+
+                    #[cfg(target_arch = "aarch64")]
+                    #impl_from_mont_asm_aarch64
+                }
+
+                let res_asm =[r0, r1, r2, r3];
+
+                // TODO - remove this check in production
+                let res_naive = {#impl_from_mont};
+                if res_asm != res_naive {
+                    panic!("Bug in ASM: {:?} (asm) != {:?} (expected)", res_asm, res_naive);
+                }
+
+                res_asm
             }
 
 
