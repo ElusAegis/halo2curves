@@ -51,10 +51,8 @@ pub(crate) fn impl_arith(field: &syn::Ident, num_limbs: usize, inv: u64) -> Toke
             #[inline]
             pub fn add(&self, rhs: &Self) -> #field {
 
-                let mut r0: u64;
-                let mut r1: u64;
-                let mut r2: u64;
-                let mut r3: u64;
+                let mut r = [0u64; 4];
+                let mut r_ptr: *mut u64 = r.as_mut_ptr();
 
                 let a_ptr: *const u64 = self.0.as_ptr();
                 let b_ptr: *const u64 = rhs.0.as_ptr();
@@ -68,13 +66,15 @@ pub(crate) fn impl_arith(field: &syn::Ident, num_limbs: usize, inv: u64) -> Toke
                     #impl_add_asm_aarch64
                 }
 
-                let res_asm = #field([r0, r1, r2, r3]);
+                let res_asm = #field(r);
 
-
-                // TODO - remove this check in production
-                let res_naive = {#impl_add};
-                if res_asm != res_naive {
-                    panic!("Bug in ASM: {:?} (asm) != {:?} (expected)", res_asm, res_naive);
+                #[cfg(test)]
+                {
+                    // TODO - remove this check in production
+                    let res_naive = {#impl_add};
+                    if res_asm != res_naive {
+                        panic!("Bug in ASM: {:?} (asm) != {:?} (expected)", res_asm, res_naive);
+                    }
                 }
 
                 res_asm
@@ -83,10 +83,8 @@ pub(crate) fn impl_arith(field: &syn::Ident, num_limbs: usize, inv: u64) -> Toke
             /// Subtracts `rhs` from `self`, returning the result.
             #[inline]
             pub fn sub(&self, rhs: &Self) -> #field {
-                let mut r0: u64;
-                let mut r1: u64;
-                let mut r2: u64;
-                let mut r3: u64;
+                let mut r = [0u64; 4];
+                let mut r_ptr: *mut u64 = r.as_mut_ptr();
 
                 let a_ptr: *const u64 = self.0.as_ptr();
                 let b_ptr: *const u64 = rhs.0.as_ptr();
@@ -100,12 +98,15 @@ pub(crate) fn impl_arith(field: &syn::Ident, num_limbs: usize, inv: u64) -> Toke
                     #impl_sub_asm_aarch64
                 }
 
-                let res_asm = #field([r0, r1, r2, r3]);
+                let res_asm = #field(r);
 
-                // TODO - remove this check in production
-                let res_naive = {#impl_sub};
-                if res_asm != res_naive {
-                    panic!("Bug in ASM: {:?} (asm) != {:?} (expected)", res_asm, res_naive);
+                #[cfg(test)]
+                {
+                    // TODO - remove this check in production
+                    let res_naive = {#impl_sub};
+                    if res_asm != res_naive {
+                        panic!("Bug in ASM: {:?} (asm) != {:?} (expected)", res_asm, res_naive);
+                    }
                 }
 
                 res_asm
@@ -114,10 +115,8 @@ pub(crate) fn impl_arith(field: &syn::Ident, num_limbs: usize, inv: u64) -> Toke
             /// Negates `self`.
             #[inline]
             pub fn neg(&self) -> #field {
-                let mut r0: u64;
-                let mut r1: u64;
-                let mut r2: u64;
-                let mut r3: u64;
+                let mut r = [0u64; 4];
+                let mut r_ptr: *mut u64 = r.as_mut_ptr();
 
                 let a_ptr: *const u64 = self.0.as_ptr();
                 let m_ptr: *const u64 = #field::MODULUS_LIMBS.as_ptr();
@@ -130,12 +129,15 @@ pub(crate) fn impl_arith(field: &syn::Ident, num_limbs: usize, inv: u64) -> Toke
                     #impl_neg_asm_aarch64
                 }
 
-                let res_asm = #field([r0, r1, r2, r3]);
+                let res_asm = #field(r);
 
-                // TODO - remove this check in production
-                let res_naive = {#impl_neg};
-                if res_asm != res_naive {
-                    panic!("Bug in ASM: {:?} (asm) != {:?} (expected)", res_asm, res_naive);
+                #[cfg(test)]
+                {
+                    // TODO - remove this check in production
+                    let res_naive = {#impl_neg};
+                    if res_asm != res_naive {
+                        panic!("Bug in ASM: {:?} (asm) != {:?} (expected)", res_asm, res_naive);
+                    }
                 }
 
                 res_asm
@@ -144,10 +146,8 @@ pub(crate) fn impl_arith(field: &syn::Ident, num_limbs: usize, inv: u64) -> Toke
             /// Doubles this field element.
             #[inline]
             pub fn double(&self) -> #field {
-                let mut r0: u64;
-                let mut r1: u64;
-                let mut r2: u64;
-                let mut r3: u64;
+                let mut r = [0u64; 4];
+                let mut r_ptr: *mut u64 = r.as_mut_ptr();
 
                 let a_ptr: *const u64 = self.0.as_ptr();
                 let m_ptr: *const u64 = #field::MODULUS_LIMBS.as_ptr();
@@ -160,15 +160,13 @@ pub(crate) fn impl_arith(field: &syn::Ident, num_limbs: usize, inv: u64) -> Toke
                     #impl_double_asm_aarch64
                 }
 
-                #field([r0, r1, r2, r3])
+                #field(r)
             }
 
             #[inline(always)]
             pub fn mul(&self, rhs: &Self) -> Self{
-                let mut r0: u64;
-                let mut r1: u64;
-                let mut r2: u64;
-                let mut r3: u64;
+                let mut r = [0u64; 4];
+                let mut r_ptr: *mut u64 = r.as_mut_ptr();
 
                 let a_ptr: *const u64 = self.0.as_ptr();
                 let b_ptr: *const u64 = rhs.0.as_ptr();
@@ -183,12 +181,15 @@ pub(crate) fn impl_arith(field: &syn::Ident, num_limbs: usize, inv: u64) -> Toke
                     #impl_mul_asm_aarch64
                 }
 
-                let res_asm = #field([r0, r1, r2, r3]);
+                let res_asm = #field(r);
 
-                // TODO - remove this check in production
-                let res_naive = {#impl_mul};
-                if res_asm != res_naive {
-                    panic!("Bug in ASM: {:?} (asm) != {:?} (expected)", res_asm, res_naive);
+                #[cfg(test)]
+                {
+                    // TODO - remove this check in production
+                    let res_naive = {#impl_mul};
+                    if res_asm != res_naive {
+                        panic!("Bug in ASM: {:?} (asm) != {:?} (expected)", res_asm, res_naive);
+                    }
                 }
 
                 res_asm
@@ -200,6 +201,7 @@ pub(crate) fn impl_arith(field: &syn::Ident, num_limbs: usize, inv: u64) -> Toke
             }
 
             // TODO - remove in production as only needed by impl_from_mont
+            #[cfg(test)]
             #[inline(always)]
             pub(crate) fn montgomery_reduce(r: &[u64; #wide_num_limbs]) -> Self {
                 #impl_mont
@@ -208,10 +210,8 @@ pub(crate) fn impl_arith(field: &syn::Ident, num_limbs: usize, inv: u64) -> Toke
             /// Converts this field element from Montgomery form back to standard representation.
             #[inline(always)]
             pub(crate) fn from_mont(&self) -> [u64; Self::NUM_LIMBS] {
-                let mut r0: u64;
-                let mut r1: u64;
-                let mut r2: u64;
-                let mut r3: u64;
+                let mut r = [0u64; 4];
+                let mut r_ptr: *mut u64 = r.as_mut_ptr();
 
                 let a_ptr: *const u64 = self.0.as_ptr();
                 let m_ptr: *const u64 = #field::MODULUS_LIMBS.as_ptr();
@@ -225,39 +225,19 @@ pub(crate) fn impl_arith(field: &syn::Ident, num_limbs: usize, inv: u64) -> Toke
                     #impl_from_mont_asm_aarch64
                 }
 
-                let res_asm =[r0, r1, r2, r3];
+                let res_asm = r;
 
-                // TODO - remove this check in production
-                let res_naive = {#impl_from_mont};
-                if res_asm != res_naive {
-                    panic!("Bug in ASM: {:?} (asm) != {:?} (expected)", res_asm, res_naive);
+                #[cfg(test)]
+                {
+                    // TODO - remove this check in production
+                    let res_naive = {#impl_from_mont};
+                    if res_asm != res_naive {
+                        panic!("Bug in ASM: {:?} (asm) != {:?} (expected)", res_asm, res_naive);
+                    }
                 }
 
                 res_asm
             }
-
-            // Helper functions for arithmetic operations with carry and borrow
-            fn mul_with_carry(a: u64, b: u64, carry_in: u64) -> (u64, u64) {
-                let product = (a as u128) * (b as u128) + (carry_in as u128);
-                let low = product as u64;
-                let high = (product >> 64) as u64;
-                (low, high)
-            }
-
-            fn add_with_carry(a: u64, b: u64, carry_in: u64) -> (u64, u64) {
-                let sum = (a as u128) + (b as u128) + (carry_in as u128);
-                let low = sum as u64;
-                let carry_out = (sum >> 64) as u64;
-                (low, carry_out)
-            }
-
-            fn sub_with_borrow(a: u64, b: u64, borrow_in: u64) -> (u64, u64) {
-                let (res1, overflow1) = a.overflowing_sub(borrow_in);
-                let (res2, overflow2) = res1.overflowing_sub(b);
-                let borrow_out = (overflow1 as u64) + (overflow2 as u64);
-                (res2, borrow_out)
-            }
-
 
         }
 

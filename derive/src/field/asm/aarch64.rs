@@ -35,15 +35,16 @@ pub(super) fn impl_add_asm() -> TokenStream {
             "csel {r2}, {a2}, {r2}, cc",
             "csel {r3}, {a3}, {r3}, cc",
 
+            // Save result back to 'r' array
+            "stp {r0}, {r1}, [{r_ptr}]",
+            "stp {r2}, {r3}, [{r_ptr}, #16]",
+
             // Outputs
             m_ptr = in(reg) m_ptr,
             a_ptr = in(reg) a_ptr,
             b_ptr = in(reg) b_ptr,
             // Output operands
-            r0 = out(reg) r0,
-            r1 = out(reg) r1,
-            r2 = out(reg) r2,
-            r3 = out(reg) r3,
+            r_ptr = inout(reg) r_ptr,
             // Temporary (clobbered) registers
             a0 = out(reg) _,
             a1 = out(reg) _,
@@ -57,6 +58,10 @@ pub(super) fn impl_add_asm() -> TokenStream {
             m1 = out(reg) _,
             m2 = out(reg) _,
             m3 = out(reg) _,
+            r0 = out(reg) _,
+            r1 = out(reg) _,
+            r2 = out(reg) _,
+            r3 = out(reg) _,
             options(pure, readonly, nostack)
         );
     }
@@ -90,20 +95,21 @@ pub(super) fn impl_sub_asm() -> TokenStream {
             "csel {m3}, xzr, {m3}, cs",
 
             // Add modulus to result if borrow occurred
-            "adds {r0}, {a0}, {m0}",
-            "adcs {r1}, {a1}, {m1}",
-            "adcs {r2}, {a2}, {m2}",
-            "adcs {r3}, {a3}, {m3}",
+            "adds {a0}, {a0}, {m0}",
+            "adcs {a1}, {a1}, {m1}",
+            "adcs {a2}, {a2}, {m2}",
+            "adcs {a3}, {a3}, {m3}",
+
+            // Save result back to 'r' array
+            "stp {a0}, {a1}, [{r_ptr}]",
+            "stp {a2}, {a3}, [{r_ptr}, #16]",
 
             // Outputs
             m_ptr = in(reg) m_ptr,
             a_ptr = in(reg) a_ptr,
             b_ptr = in(reg) b_ptr,
             // Output operands
-            r0 = lateout(reg) r0,
-            r1 = lateout(reg) r1,
-            r2 = lateout(reg) r2,
-            r3 = lateout(reg) r3,
+            r_ptr = inout(reg) r_ptr,
             // Temporary (clobbered) registers
             a0 = out(reg) _,
             a1 = out(reg) _,
@@ -113,9 +119,9 @@ pub(super) fn impl_sub_asm() -> TokenStream {
             b1 = out(reg) _,
             b2 = out(reg) _,
             b3 = out(reg) _,
-            m0 = out(reg) _,
-            m1 = out(reg) _,
-            m2 = out(reg) _,
+            m0 = out(reg) _, // We could have reused 'b' registers here
+            m1 = out(reg) _, // However, we trust the compiler to optimize
+            m2 = out(reg) _, // And keep the code readable
             m3 = out(reg) _,
             options(pure, readonly, nostack)
         );
@@ -160,13 +166,15 @@ pub(crate) fn impl_neg_asm() -> TokenStream {
             "and {r2}, {r2}, {mask}",
             "and {r3}, {r3}, {mask}",
 
+            // Save result back to 'r' array
+            "stp {r0}, {r1}, [{r_ptr}]",
+            "stp {r2}, {r3}, [{r_ptr}, #16]",
+
             // Outputs
             a_ptr = in(reg) a_ptr,
             m_ptr = in(reg) m_ptr,
-            r0 = out(reg) r0,
-            r1 = out(reg) r1,
-            r2 = out(reg) r2,
-            r3 = out(reg) r3,
+            // Output operands
+            r_ptr = inout(reg) r_ptr,
             // Temporary registers
             a0 = out(reg) _,
             a1 = out(reg) _,
@@ -181,6 +189,10 @@ pub(crate) fn impl_neg_asm() -> TokenStream {
             m2 = out(reg) _,
             m3 = out(reg) _,
             mask = out(reg) _,
+            r0 = out(reg) _,
+            r1 = out(reg) _,
+            r2 = out(reg) _,
+            r3 = out(reg) _,
             options(pure, readonly, nostack)
         );
     }
@@ -215,14 +227,16 @@ pub(crate) fn impl_double_asm() -> TokenStream {
             "csel {r2}, {a2}, {r2}, cc",
             "csel {r3}, {a3}, {r3}, cc",
 
+            // Save result back to 'r' array
+            "stp {r0}, {r1}, [{r_ptr}]",
+            "stp {r2}, {r3}, [{r_ptr}, #16]",
+
+
             // Outputs
             m_ptr = in(reg) m_ptr,
             a_ptr = in(reg) a_ptr,
             // Output operands
-            r0 = out(reg) r0,
-            r1 = out(reg) r1,
-            r2 = out(reg) r2,
-            r3 = out(reg) r3,
+            r_ptr = inout(reg) r_ptr,
             // Temporary (clobbered) registers
             a0 = out(reg) _,
             a1 = out(reg) _,
@@ -232,6 +246,10 @@ pub(crate) fn impl_double_asm() -> TokenStream {
             m1 = out(reg) _,
             m2 = out(reg) _,
             m3 = out(reg) _,
+            r0 = out(reg) _,
+            r1 = out(reg) _,
+            r2 = out(reg) _,
+            r3 = out(reg) _,
             options(pure, readonly, nostack)
         );
     }
@@ -371,17 +389,16 @@ pub(crate) fn impl_from_mont_asm() -> TokenStream {
             // End of Montgomery Reduction Loop
             // ========================
 
-            // The result is in r0 (we can output r0 as the final result)
+            // Save result back to 'r' array
+            "stp {r0}, {r1}, [{r_ptr}]",
+            "stp {r2}, {r3}, [{r_ptr}, #16]",
 
             // Outputs
             a_ptr = in(reg) a_ptr,
             m_ptr = in(reg) m_ptr,
             inv = in(reg) inv,
             // Output operands
-            r0 = out(reg) r0,
-            r1 = out(reg) r1,
-            r2 = out(reg) r2,
-            r3 = out(reg) r3,
+            r_ptr = inout(reg) r_ptr,
             // Temporary (clobbered) registers
             m = out(reg) _,
             l = out(reg) _,
@@ -391,6 +408,10 @@ pub(crate) fn impl_from_mont_asm() -> TokenStream {
             m2 = out(reg) _,
             m3 = out(reg) _,
             inv_reg = out(reg) _,
+            r0 = out(reg) _,
+            r1 = out(reg) _,
+            r2 = out(reg) _,
+            r3 = out(reg) _,
             options(pure, readonly, nostack)
         );
     }
@@ -808,6 +829,10 @@ pub(crate) fn impl_mul_asm() -> TokenStream {
             "csel {r2}, {r2}, {t2}, hs",
             "csel {r3}, {r3}, {t3}, hs",
 
+            // Save result back to 'r' array
+            "stp {r0}, {r1}, [{r_ptr}]",
+            "stp {r2}, {r3}, [{r_ptr}, #16]",
+
             // Outputs
             a_ptr = in(reg) a_ptr,
             b_ptr = in(reg) b_ptr,
@@ -815,10 +840,7 @@ pub(crate) fn impl_mul_asm() -> TokenStream {
             inv = in(reg) inv,
 
             // Output operands
-            r0 = out(reg) r0,
-            r1 = out(reg) r1,
-            r2 = out(reg) r2,
-            r3 = out(reg) r3,
+            r_ptr = inout(reg) r_ptr,
 
             // Temporary registers
             t0 = out(reg) _,
@@ -837,6 +859,10 @@ pub(crate) fn impl_mul_asm() -> TokenStream {
             mul_hi = out(reg) _,
             mul_lo = out(reg) _,
             inv_reg = out(reg) _,
+            r0 = out(reg) _,
+            r1 = out(reg) _,
+            r2 = out(reg) _,
+            r3 = out(reg) _,
             options(pure, readonly, nostack)
         );
     }
