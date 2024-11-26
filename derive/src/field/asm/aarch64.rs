@@ -6,28 +6,22 @@ pub(super) fn impl_add_asm() -> TokenStream {
     quote::quote! {
         std::arch::asm!(
             // Load 'a' array into registers
-            "ldr {a0}, [{a_ptr}, #0]",
-            "ldr {a1}, [{a_ptr}, #8]",
-            "ldr {a2}, [{a_ptr}, #16]",
-            "ldr {a3}, [{a_ptr}, #24]",
-
-            // Load 'b' array into registers of 'r'
-            "ldr {r0}, [{b_ptr}, #0]",
-            "ldr {r1}, [{b_ptr}, #8]",
-            "ldr {r2}, [{b_ptr}, #16]",
-            "ldr {r3}, [{b_ptr}, #24]",
-
-            // Add 'a' and 'b' with carry propagation
-            "adds {a0}, {a0}, {r0}",   // a0 = a0 + b0, sets flags
-            "adcs {a1}, {a1}, {r1}",   // a1 = a1 + b1 + carry
-            "adcs {a2}, {a2}, {r2}",
-            "adcs {a3}, {a3}, {r3}",
+            "ldp {a0}, {a1}, [{a_ptr}]",
+            "ldp {a2}, {a3}, [{a_ptr}, #16]",
 
             // Load 'm' array into registers for modular reduction
-            "ldr {m0}, [{m_ptr}, #0]",
-            "ldr {m1}, [{m_ptr}, #8]",
-            "ldr {m2}, [{m_ptr}, #16]",
-            "ldr {m3}, [{m_ptr}, #24]",
+            "ldp {m0}, {m1}, [{m_ptr}]",
+            "ldp {m2}, {m3}, [{m_ptr}, #16]",
+
+            // Load 'b' array into registers of 'r'
+            "ldp {b0}, {b1}, [{b_ptr}]",
+            "ldp {b2}, {b3}, [{b_ptr}, #16]",
+
+            // Add 'a' and 'b' with carry propagation
+            "adds {a0}, {a0}, {b0}",   // a0 = a0 + b0, sets flags
+            "adcs {a1}, {a1}, {b1}",   // a1 = a1 + b1 + carry
+            "adcs {a2}, {a2}, {b2}",
+            "adc {a3}, {a3}, {b3}",
 
             // Subtract 'm' from the result with borrow propagation
             "subs {r0}, {a0}, {m0}",   // r0 = r0 - m0, sets flags
@@ -55,6 +49,10 @@ pub(super) fn impl_add_asm() -> TokenStream {
             a1 = out(reg) _,
             a2 = out(reg) _,
             a3 = out(reg) _,
+            b0 = out(reg) _,
+            b1 = out(reg) _,
+            b2 = out(reg) _,
+            b3 = out(reg) _,
             m0 = out(reg) _,
             m1 = out(reg) _,
             m2 = out(reg) _,
@@ -69,16 +67,12 @@ pub(super) fn impl_sub_asm() -> TokenStream {
         std::arch::asm!(
 
             // Load 'a' array into temporary registers
-            "ldr {a0}, [{a_ptr}, #0]",
-            "ldr {a1}, [{a_ptr}, #8]",
-            "ldr {a2}, [{a_ptr}, #16]",
-            "ldr {a3}, [{a_ptr}, #24]",
+            "ldp {a0}, {a1}, [{a_ptr}]",
+            "ldp {a2}, {a3}, [{a_ptr}, #16]",
 
             // Subtract 'b' array from 'a' array with borrow propagation
-            "ldr {b0}, [{b_ptr}, #0]",
-            "ldr {b1}, [{b_ptr}, #8]",
-            "ldr {b2}, [{b_ptr}, #16]",
-            "ldr {b3}, [{b_ptr}, #24]",
+            "ldp {b0}, {b1}, [{b_ptr}]",
+            "ldp {b2}, {b3}, [{b_ptr}, #16]",
 
             "subs {a0}, {a0}, {b0}",  // a0 = a0 - b0, sets flags
             "sbcs {a1}, {a1}, {b1}",  // a1 = a1 - b1 - borrow
@@ -86,10 +80,8 @@ pub(super) fn impl_sub_asm() -> TokenStream {
             "sbcs {a3}, {a3}, {b3}",
 
             // Load 'm' array into registers (modulus)
-            "ldr {m0}, [{m_ptr}, #0]",
-            "ldr {m1}, [{m_ptr}, #8]",
-            "ldr {m2}, [{m_ptr}, #16]",
-            "ldr {m3}, [{m_ptr}, #24]",
+            "ldp {m0}, {m1}, [{m_ptr}]",
+            "ldp {m2}, {m3}, [{m_ptr}, #16]",
 
             // Mask: Use conditional selection to zero out modulus if borrow occurred
             "csel {m0}, xzr, {m0}, cs",  // cs = carry set (no borrow)
@@ -134,16 +126,13 @@ pub(crate) fn impl_neg_asm() -> TokenStream {
     quote::quote! {
         std::arch::asm!(
             // Load 'm' array into registers
-            "ldr {m0}, [{m_ptr}, #0]",
-            "ldr {m1}, [{m_ptr}, #8]",
-            "ldr {m2}, [{m_ptr}, #16]",
-            "ldr {m3}, [{m_ptr}, #24]",
+            "ldp {m0}, {m1}, [{m_ptr}]",
+            "ldp {m2}, {m3}, [{m_ptr}, #16]",
 
             // Subtract 'a' array from 'm' array with borrow propagation
-            "ldr {a0}, [{a_ptr}, #0]",
-            "ldr {a1}, [{a_ptr}, #8]",
-            "ldr {a2}, [{a_ptr}, #16]",
-            "ldr {a3}, [{a_ptr}, #24]",
+            "ldp {a0}, {a1}, [{a_ptr}]",
+            "ldp {a2}, {a3}, [{a_ptr}, #16]",
+
             "subs {r0}, {m0}, {a0}",  // r0 = m0 - a0, sets flags
             "sbcs {r1}, {m1}, {a1}",  // r1 = m1 - a1 - borrow
             "sbcs {r2}, {m2}, {a2}",
@@ -201,10 +190,8 @@ pub(crate) fn impl_double_asm() -> TokenStream {
     quote::quote! {
         std::arch::asm!(
             // Load 'a' array into registers
-            "ldr {a0}, [{a_ptr}, #0]",
-            "ldr {a1}, [{a_ptr}, #8]",
-            "ldr {a2}, [{a_ptr}, #16]",
-            "ldr {a3}, [{a_ptr}, #24]",
+            "ldp {a0}, {a1}, [{a_ptr}]",
+            "ldp {a2}, {a3}, [{a_ptr}, #16]",
 
             // Double 'a' values with carry propagation
             "adds {a0}, {a0}, {a0}",   // a0 = a0 + a0, sets flags
@@ -213,10 +200,8 @@ pub(crate) fn impl_double_asm() -> TokenStream {
             "adcs {a3}, {a3}, {a3}",
 
             // Load 'm' array into registers for modular reduction
-            "ldr {m0}, [{m_ptr}, #0]",
-            "ldr {m1}, [{m_ptr}, #8]",
-            "ldr {m2}, [{m_ptr}, #16]",
-            "ldr {m3}, [{m_ptr}, #24]",
+            "ldp {m0}, {m1}, [{m_ptr}]",
+            "ldp {m2}, {m3}, [{m_ptr}, #16]",
 
             // Subtract 'm' from the result with borrow propagation
             "subs {r0}, {a0}, {m0}",   // r0 = a0 - m0, sets flags
@@ -257,16 +242,12 @@ pub(crate) fn impl_from_mont_asm() -> TokenStream {
     quote::quote! {
         std::arch::asm!(
             // Load 'a' limbs into registers r0-r3
-            "ldr {r0}, [{a_ptr}, #0]",     // r0 = a[0]
-            "ldr {r1}, [{a_ptr}, #8]",     // r1 = a[1]
-            "ldr {r2}, [{a_ptr}, #16]",    // r2 = a[2]
-            "ldr {r3}, [{a_ptr}, #24]",    // r3 = a[3]
+            "ldp {r0}, {r1}, [{a_ptr}]",
+            "ldp {r2}, {r3}, [{a_ptr}, #16]",
 
             // Load 'm' limbs into registers m0-m3
-            "ldr {m0}, [{m_ptr}, #0]",     // m0 = m[0]
-            "ldr {m1}, [{m_ptr}, #8]",     // m1 = m[1]
-            "ldr {m2}, [{m_ptr}, #16]",    // m2 = m[2]
-            "ldr {m3}, [{m_ptr}, #24]",    // m3 = m[3]
+            "ldp {m0}, {m1}, [{m_ptr}]",
+            "ldp {m2}, {m3}, [{m_ptr}, #16]",
 
             // Load 'inv' (Montgomery constant)
             "mov {inv_reg}, {inv}",        // inv_reg = inv
@@ -425,10 +406,8 @@ pub(crate) fn impl_mul_asm() -> TokenStream {
             // inv: Montgomery constant (-m^-1 mod 2^64)
 
             // Load modulus limbs into registers m0-m3
-            "ldr {m0}, [{m_ptr}, #0]",     // m0 = m[0]
-            "ldr {m1}, [{m_ptr}, #8]",     // m1 = m[1]
-            "ldr {m2}, [{m_ptr}, #16]",    // m2 = m[2]
-            "ldr {m3}, [{m_ptr}, #24]",    // m3 = m[3]
+            "ldp {m0}, {m1}, [{m_ptr}]",
+            "ldp {m2}, {m3}, [{m_ptr}, #16]",
 
             // Initialize accumulators and pointers
             "mov {t0}, xzr",               // t0 = 0
